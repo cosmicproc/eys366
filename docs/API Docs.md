@@ -84,6 +84,7 @@ Graph view of our app.
 
 -   **Description:** delete existing node.
 -   Auth required
+
 ```json
 {
   "node_id": int
@@ -91,10 +92,31 @@ Graph view of our app.
 ```
 
 `/api/giraph/delete_relation`
+
 -   **Description:** delete existing relation.
 -   Auth required
+
 ```json
 {
   "relation_id": int
 }
 ```
+
+## Configuration: API Base URL
+
+Frontend requests use a configurable base URL for Giraph endpoints.
+
+Priority order:
+
+1. Runtime override via `setApiBase("https://backend.example.com/api/giraph")`
+2. Env var `NEXT_PUBLIC_GIRAPH_API_BASE`
+3. Fallback `/api/giraph`
+
+Example runtime override (in a setup script):
+
+```ts
+import { setApiBase } from "frontend/app/lib/apiClient";
+setApiBase("https://backend.example.com/api/giraph");
+```
+
+All client functions (`getNodes`, `createRelation`, `updateRelation`, `updateNode`, `deleteRelation`, `deleteNode`, `createNode`) derive the base using `getApiBase()`.

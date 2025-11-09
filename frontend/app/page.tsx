@@ -1,8 +1,8 @@
-import MainGraph from "./lib/mainGraph";
+import MainGraph from "./lib/MainGraph";
 
 export default function Home() {
     return (
-        <div className="flex-grow w-screen h-1">
+        <div className="w-screen h-screen">
             <MainGraph />
         </div>
     );

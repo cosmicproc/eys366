@@ -1,3 +1,6 @@
+import Link from "next/link";
+import NewItemButton from "./NewItemButton";
+
 export default function RootUILayout({
     children,
 }: Readonly<{
@@ -5,13 +8,17 @@ export default function RootUILayout({
 }>) {
     return (
         <div className="flex flex-col flex-grow">
-            <header className="w-full p-4 text-center font-bold text-xl bg-neutral-300 shadow-sm">
-                {process.env.APP_NAME}
+            <header className="flex justify-center absolute top-0 left-0 w-full z-10">
+                <div className="py-3 w-[35em] mx-12 my-4 font-bold border-2 border-neutral-400 bg-blue-100/30 backdrop-blur rounded-4xl shadow-md relative text-center">
+                    <Link href="/" className="text-2xl">
+                        {process.env.NEXT_PUBLIC_APP_NAME}
+                    </Link>
+                    <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
+                        <NewItemButton />
+                    </div>
+                </div>
             </header>
             {children}
-            <footer className="mt-auto text-center w-full text-sm py-2 border-t text-neutral-500">
-                {process.env.CUSTOMER_NAME}
-            </footer>
         </div>
     );
 }
