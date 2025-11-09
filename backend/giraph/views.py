@@ -2,6 +2,7 @@ from django.http import JsonResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import AllowAny
 from django.db import IntegrityError
 
 from .serializers import (
@@ -14,15 +15,6 @@ from .serializers import (
 from .models import Node, Relation, LayerChoices
 
 
-def _authorized(request) -> bool:
-    """Simple Bearer token authentication."""
-    auth = request.META.get("HTTP_AUTHORIZATION", "")
-    if not auth.lower().startswith("bearer "):
-        return False
-    token = auth.split(" ", 1)[1].strip()
-    return token == "secret-token"
-
-
 def ping(request):
     """Basic healthcheck endpoint."""
     return JsonResponse({"ok": True, "service": "giraph", "message": "endpoint works"})
@@ -32,14 +24,10 @@ class NewNode(APIView):
     """POST /api/giraph/new_node
     Body: {"name": str, "layer": "course_content"|"course_outcome"|"program_outcome"}
     """
+    authentication_classes = []
+    permission_classes = [AllowAny]
 
     def post(self, request):
-        if not _authorized(request):
-            return Response(
-                {"detail": "Auth required. Use Authorization: Bearer secret-token"},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
         ser = NewNodeSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
 
@@ -58,14 +46,10 @@ class NewRelation(APIView):
     Body: {"node1_id": int, "node2_id": int, "weight": 1|2|3|4|5}
     Validation: only cc→co or co→cp connections are allowed.
     """
+    authentication_classes = []
+    permission_classes = [AllowAny]
 
     def post(self, request):
-        if not _authorized(request):
-            return Response(
-                {"detail": "Auth required. Use Authorization: Bearer secret-token"},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
         ser = NewRelationSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
 
@@ -91,14 +75,10 @@ class GetNodes(APIView):
     """GET /api/giraph/get_nodes
     Returns all nodes and relations in the graph.
     """
+    authentication_classes = []
+    permission_classes = [AllowAny]
 
     def get(self, request):
-        if not _authorized(request):
-            return Response(
-                {"detail": "Auth required. Use Authorization: Bearer secret-token"},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
         nodes = list(Node.objects.all().only("id", "name", "layer"))
         rels = list(Relation.objects.all().only("id", "node1_id", "node2_id"))
 
@@ -134,14 +114,10 @@ class UpdateNode(APIView):
     """POST /api/giraph/update_node
     Body: {"node_id": int, "name": str}
     """
+    authentication_classes = []
+    permission_classes = [AllowAny]
 
     def post(self, request):
-        if not _authorized(request):
-            return Response(
-                {"detail": "Auth required. Use Authorization: Bearer secret-token"},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
         ser = UpdateNodeSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
 
@@ -165,14 +141,10 @@ class UpdateRelation(APIView):
     """POST /api/giraph/update_relation
     Body: {"relation_id": int, "weight": 1|2|3|4|5}
     """
+    authentication_classes = []
+    permission_classes = [AllowAny]
 
     def post(self, request):
-        if not _authorized(request):
-            return Response(
-                {"detail": "Auth required. Use Authorization: Bearer secret-token"},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
         ser = UpdateRelationSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
 
@@ -196,14 +168,10 @@ class DeleteNode(APIView):
     """DELETE /api/giraph/delete_node
     Body: {"node_id": int}
     """
+    authentication_classes = []
+    permission_classes = [AllowAny]
 
     def delete(self, request):
-        if not _authorized(request):
-            return Response(
-                {"detail": "Auth required. Use Authorization: Bearer secret-token"},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
         node_id = request.data.get("node_id")
         if not node_id:
             return Response(
@@ -227,14 +195,10 @@ class DeleteRelation(APIView):
     """DELETE /api/giraph/delete_relation
     Body: {"relation_id": int}
     """
+    authentication_classes = []
+    permission_classes = [AllowAny]
 
     def delete(self, request):
-        if not _authorized(request):
-            return Response(
-                {"detail": "Auth required. Use Authorization: Bearer secret-token"},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
         relation_id = request.data.get("relation_id")
         if not relation_id:
             return Response(
