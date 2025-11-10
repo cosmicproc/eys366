@@ -10,7 +10,11 @@ export async function POST(request: Request) {
                 { status: 400 }
             );
         }
-        if (!["cc", "co", "po"].includes(layer)) {
+        if (
+            !["course_content", "course_outcome", "program_outcome"].includes(
+                layer
+            )
+        ) {
             return NextResponse.json(
                 { error: "Invalid layer value" },
                 { status: 400 }

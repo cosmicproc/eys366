@@ -46,11 +46,8 @@ export function setApiBase(base: string) {
 
 export function getApiBase(): string {
     if (runtimeApiBase) return runtimeApiBase;
-    if (
-        typeof process !== "undefined" &&
-        process.env.NEXT_PUBLIC_GIRAPH_API_BASE
-    ) {
-        return process.env.NEXT_PUBLIC_GIRAPH_API_BASE.replace(/\/$/, "");
+    if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_BASE) {
+        return process.env.NEXT_PUBLIC_API_BASE.replace(/\/$/, "");
     }
     return "/api/giraph";
 }
@@ -111,7 +108,7 @@ export async function updateRelation(
     weight: number
 ): Promise<{ message: string }> {
     const response = await fetch(`${getApiBase()}/update_relation`, {
-        method: "PUT",
+        method: "POST",
         headers: {
             "Content-Type": "application/json",
         },
@@ -125,9 +122,9 @@ export async function updateNode(
     name: string
 ): Promise<{ message: string }> {
     const response = await fetch(`${getApiBase()}/update_node`, {
-        method: "PUT",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, name }),
+        body: JSON.stringify({ node_id: id, name }),
     });
     return handleResponse<{ message: string }>(response);
 }
@@ -136,13 +133,15 @@ export async function deleteNode(id: number): Promise<{ message: string }> {
     const response = await fetch(`${getApiBase()}/delete_node`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
+        body: JSON.stringify({ node_id: id }),
     });
     return handleResponse<{ message: string }>(response);
 }
 
+export type NodeLayer = "course_content" | "course_outcome" | "program_outcome";
+
 export async function createNode(
-    layer: "cc" | "co" | "po",
+    layer: NodeLayer,
     name: string
 ): Promise<{ message: string; id: number }> {
     const response = await fetch(`${getApiBase()}/new_node`, {

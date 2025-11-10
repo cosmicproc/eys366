@@ -52,7 +52,7 @@ const convertToNodes = (data: GetNodesResponse): Node[] => {
     // Course Content nodes
     data.course_contents.forEach((node, index) => {
         nodes.push({
-            id: `cc-${node.id}`,
+            id: `course_content-${node.id}`,
             position: { x: 50, y: yOffset + index * 100 },
             data: { label: node.name, apiId: node.id },
             type: "graphnode",
@@ -74,7 +74,7 @@ const convertToNodes = (data: GetNodesResponse): Node[] => {
     yOffset = 80;
     data.course_outcomes.forEach((node, index) => {
         nodes.push({
-            id: `co-${node.id}`,
+            id: `course_outcome-${node.id}`,
             position: { x: 400, y: yOffset + index * 100 },
             data: { label: node.name, apiId: node.id },
             type: "graphnode",
@@ -96,7 +96,7 @@ const convertToNodes = (data: GetNodesResponse): Node[] => {
     yOffset = 100;
     data.program_outcomes.forEach((node, index) => {
         nodes.push({
-            id: `po-${node.id}`,
+            id: `program_outcome-${node.id}`,
             position: { x: 750, y: yOffset + index * 100 },
             data: { label: node.name, apiId: node.id },
             type: "graphnode",
@@ -120,6 +120,7 @@ const convertToNodes = (data: GetNodesResponse): Node[] => {
 // Helper function to convert API relations to React Flow edges
 const convertToEdges = (data: GetNodesResponse): Edge[] => {
     const edges: Edge[] = [];
+    const seenRelations = new Set<number>();
 
     // Process all node types and their relations
     const allNodes = [
@@ -130,6 +131,9 @@ const convertToEdges = (data: GetNodesResponse): Edge[] => {
 
     allNodes.forEach((node) => {
         node.relations.forEach((relation) => {
+            // Skip if we've already created this edge (API returns relations on both ends)
+            if (seenRelations.has(relation.relation_id)) return;
+            seenRelations.add(relation.relation_id);
             const sourceId = `${getLayerPrefix(relation.node1_id, data)}-${
                 relation.node1_id
             }`;
@@ -137,7 +141,8 @@ const convertToEdges = (data: GetNodesResponse): Edge[] => {
                 relation.node2_id
             }`;
             const sourceLayer = getLayerPrefix(relation.node1_id, data);
-            const edgeColor = sourceLayer === "cc" ? "#1976d2" : "#388e3c";
+            const edgeColor =
+                sourceLayer === "course_content" ? "#1976d2" : "#388e3c";
 
             edges.push({
                 id: `e-${relation.relation_id}`,
@@ -168,17 +173,22 @@ const convertToEdges = (data: GetNodesResponse): Edge[] => {
 
 // Helper to get layer prefix from node ID
 const getLayerPrefix = (nodeId: number, data: GetNodesResponse): string => {
-    if (data.course_contents.some((n) => n.id === nodeId)) return "cc";
-    if (data.course_outcomes.some((n) => n.id === nodeId)) return "co";
-    if (data.program_outcomes.some((n) => n.id === nodeId)) return "po";
+    if (data.course_contents.some((n) => n.id === nodeId))
+        return "course_content";
+    if (data.course_outcomes.some((n) => n.id === nodeId))
+        return "course_outcome";
+    if (data.program_outcomes.some((n) => n.id === nodeId))
+        return "program_outcome";
     return "unknown";
 };
 
 // Helper function to determine node layer
-const getNodeLayer = (nodeId: string): "cc" | "co" | "po" | null => {
-    if (nodeId.startsWith("cc")) return "cc";
-    if (nodeId.startsWith("co")) return "co";
-    if (nodeId.startsWith("po")) return "po";
+const getNodeLayer = (
+    nodeId: string
+): "course_content" | "course_outcome" | "program_outcome" | null => {
+    if (nodeId.startsWith("course_content")) return "course_content";
+    if (nodeId.startsWith("course_outcome")) return "course_outcome";
+    if (nodeId.startsWith("program_outcome")) return "program_outcome";
     return null;
 };
 
@@ -190,8 +200,10 @@ const isValidConnection = (connection: Connection): boolean => {
     const targetLayer = getNodeLayer(connection.target);
 
     // Only allow CC -> CO or CO -> PO connections
-    if (sourceLayer === "cc" && targetLayer === "co") return true;
-    if (sourceLayer === "co" && targetLayer === "po") return true;
+    if (sourceLayer === "course_content" && targetLayer === "course_outcome")
+        return true;
+    if (sourceLayer === "course_outcome" && targetLayer === "program_outcome")
+        return true;
 
     return false;
 };
@@ -238,7 +250,14 @@ export default function MainGraph() {
         // Listen for new node event from header modal
         const handler = (e: Event) => {
             const detail = (e as CustomEvent).detail as
-                | { id: number; name: string; type: "cc" | "co" | "po" }
+                | {
+                      id: number;
+                      name: string;
+                      type:
+                          | "course_content"
+                          | "course_outcome"
+                          | "program_outcome";
+                  }
                 | undefined;
             if (!detail) return;
             setNodes((prev) => {
@@ -246,22 +265,40 @@ export default function MainGraph() {
                     80 +
                     prev.filter((n) => n.id.startsWith(detail.type)).length *
                         100;
-                const xMap = { cc: 50, co: 400, po: 750 } as const;
+                const xMap = {
+                    course_content: 50,
+                    course_outcome: 400,
+                    program_outcome: 750,
+                } as const;
                 const colorMap = {
-                    cc: { bg: "#e3f2fd", border: "#1976d2", width: 180 },
-                    co: { bg: "#f3e5f5", border: "#7b1fa2", width: 180 },
-                    po: { bg: "#e8f5e9", border: "#388e3c", width: 200 },
+                    course_content: {
+                        bg: "#e3f2fd",
+                        border: "#1976d2",
+                        width: 180,
+                    },
+                    course_outcome: {
+                        bg: "#f3e5f5",
+                        border: "#7b1fa2",
+                        width: 180,
+                    },
+                    program_outcome: {
+                        bg: "#e8f5e9",
+                        border: "#388e3c",
+                        width: 200,
+                    },
                 } as const;
                 const c = colorMap[detail.type];
                 const posX = xMap[detail.type];
                 const sourcePosition =
-                    detail.type === "cc"
+                    detail.type === "course_content"
                         ? Position.Right
-                        : detail.type === "co"
+                        : detail.type === "course_outcome"
                         ? Position.Right
                         : Position.Left;
                 const targetPosition =
-                    detail.type === "cc" ? Position.Right : Position.Left;
+                    detail.type === "course_content"
+                        ? Position.Right
+                        : Position.Left;
                 const newNode: Node = {
                     id: `${detail.type}-${detail.id}`,
                     position: { x: posX, y },
@@ -392,7 +429,8 @@ export default function MainGraph() {
                     weightValue
                 );
                 const sourceLayer = getNodeLayer(params.source!);
-                const edgeColor = sourceLayer === "cc" ? "#1976d2" : "#388e3c";
+                const edgeColor =
+                    sourceLayer === "course_content" ? "#1976d2" : "#388e3c";
                 setEdges((edgesSnapshot) =>
                     addEdge(
                         {
@@ -580,7 +618,7 @@ export default function MainGraph() {
             byTarget.get(e.target)!.push(e);
         }
 
-        if (selectedLayer === "cc") {
+        if (selectedLayer === "course_content") {
             // cc -> co
             const toCo = bySource.get(selectedNodeId) || [];
             const coIds: string[] = [];
@@ -597,7 +635,7 @@ export default function MainGraph() {
                     connectedNodeIds.add(e.target);
                 }
             }
-        } else if (selectedLayer === "co") {
+        } else if (selectedLayer === "course_outcome") {
             // co -> po
             const toPo = bySource.get(selectedNodeId) || [];
             for (const e of toPo) {
@@ -610,7 +648,7 @@ export default function MainGraph() {
                 connectedEdgeIds.add(e.id);
                 connectedNodeIds.add(e.source);
             }
-        } else if (selectedLayer === "po") {
+        } else if (selectedLayer === "program_outcome") {
             // co -> po (incoming)
             const fromCo = byTarget.get(selectedNodeId) || [];
             const coIds: string[] = [];

@@ -9,18 +9,18 @@ import {
     TextInput,
 } from "@mantine/core";
 import { useState } from "react";
-import { createNode } from "./apiClient";
+import { createNode, type NodeLayer } from "./apiClient";
 
 export default function NewItemButton() {
     const [open, setOpen] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [type, setType] = useState<"cc" | "co" | "po">("cc");
+    const [type, setType] = useState<NodeLayer>("course_content");
     const [name, setName] = useState("");
     const [error, setError] = useState<string | null>(null);
     const NAME_MAX = 60;
 
     const reset = () => {
-        setType("cc");
+        setType("course_content");
         setName("");
         setError(null);
     };
@@ -38,15 +38,13 @@ export default function NewItemButton() {
         }
         try {
             setSaving(true);
-            const res = await createNode(type, trimmed);
-            // Notify graph to insert the new node optimistically
+            await createNode(type, trimmed);
+            // Reload the page so data is re-fetched and graph is consistent
             if (typeof window !== "undefined") {
-                window.dispatchEvent(
-                    new CustomEvent("giraph:new-node", {
-                        detail: { id: res.id, name: trimmed, type },
-                    })
-                );
+                window.location.reload();
+                return;
             }
+            // Fallback for non-browser
             setOpen(false);
             reset();
         } catch (e: any) {
@@ -72,9 +70,18 @@ export default function NewItemButton() {
                         value={type}
                         onChange={(v) => setType(v as any)}
                         data={[
-                            { label: "Course Content", value: "cc" },
-                            { label: "Course Outcome", value: "co" },
-                            { label: "Program Outcome", value: "po" },
+                            {
+                                label: "Course Content",
+                                value: "course_content",
+                            },
+                            {
+                                label: "Course Outcome",
+                                value: "course_outcome",
+                            },
+                            {
+                                label: "Program Outcome",
+                                value: "program_outcome",
+                            },
                         ]}
                     />
                     {error && (
