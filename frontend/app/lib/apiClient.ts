@@ -49,7 +49,7 @@ export function getApiBase(): string {
     if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_BASE) {
         return process.env.NEXT_PUBLIC_API_BASE.replace(/\/$/, "");
     }
-    return "/api/giraph";
+    return "http://127.0.0.1:8000/api/giraph";
 }
 
 export interface NodeRelation {
