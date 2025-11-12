@@ -373,13 +373,24 @@ export default function MainGraph() {
         (params: Connection) => {
             // Only add edge if it maintains bipartite structure
             if (isValidConnection(params)) {
+                // Prevent duplicate edges between same source and target
+                if (
+                    edges.some(
+                        (e) =>
+                            e.source === params.source &&
+                            e.target === params.target
+                    )
+                ) {
+                    // Silently ignore duplicates
+                    return;
+                }
                 setModalMode("create");
                 setPendingConnection(params);
                 setWeightValue(1);
                 setWeightModalOpen(true);
             }
         },
-        [nodes]
+        [nodes, edges]
     );
 
     const onEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
@@ -404,6 +415,32 @@ export default function MainGraph() {
         setSaving(false);
     };
 
+    const deleteCurrentEdge = async () => {
+        if (!editingEdge) return;
+        setModalError(null);
+        const relationId = (editingEdge.data as any)?.relationId as
+            | number
+            | undefined;
+        if (!relationId) {
+            // Nothing to delete
+            closeModal();
+            return;
+        }
+        setSaving(true);
+        const prevEdges = edges;
+        // Optimistic removal
+        setEdges((prev) => prev.filter((e) => e.id !== editingEdge.id));
+        try {
+            await deleteRelation(relationId);
+            closeModal();
+        } catch (err: any) {
+            // Revert on failure
+            setEdges(prevEdges);
+            setModalError(`Failed to delete edge: ${err.message}`);
+            setSaving(false);
+        }
+    };
+
     const submitWeight = async () => {
         setModalError(null);
         if (weightValue === "" || weightValue < 1 || weightValue > 5) {
@@ -414,6 +451,21 @@ export default function MainGraph() {
             setSaving(true);
             if (modalMode === "create" && pendingConnection) {
                 const params = pendingConnection;
+                // Double-check duplicates before creating, to avoid race conditions
+                if (
+                    params.source &&
+                    params.target &&
+                    edges.some(
+                        (e) =>
+                            e.source === params.source &&
+                            e.target === params.target
+                    )
+                ) {
+                    // Silently close modal on duplicate to avoid user-facing messages
+                    setSaving(false);
+                    closeModal();
+                    return;
+                }
                 const sourceNode = nodes.find((n) => n.id === params.source);
                 const targetNode = nodes.find((n) => n.id === params.target);
                 if (!sourceNode || !targetNode) {
@@ -802,6 +854,16 @@ export default function MainGraph() {
                         >
                             Cancel
                         </Button>
+                        {modalMode === "edit" && (
+                            <Button
+                                color="red"
+                                variant="light"
+                                onClick={deleteCurrentEdge}
+                                disabled={saving}
+                            >
+                                Delete
+                            </Button>
+                        )}
                         <Button onClick={submitWeight} loading={saving}>
                             {modalMode === "create" ? "Create" : "Save"}
                         </Button>
