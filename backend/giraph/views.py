@@ -1,18 +1,18 @@
+from django.db import IntegrityError
 from django.http import JsonResponse
-from rest_framework.views import APIView
-from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny
-from django.db import IntegrityError
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
+from .models import LayerChoices, Node, Relation
 from .serializers import (
+    GetNodesResponseSerializer,
     NewNodeSerializer,
     NewRelationSerializer,
-    GetNodesResponseSerializer,
     UpdateNodeSerializer,
     UpdateRelationSerializer,
 )
-from .models import Node, Relation, LayerChoices
 
 
 def ping(request):
@@ -24,6 +24,7 @@ class NewNode(APIView):
     """POST /api/giraph/new_node
     Body: {"name": str, "layer": "course_content"|"course_outcome"|"program_outcome"}
     """
+
     authentication_classes = []
     permission_classes = [AllowAny]
 
@@ -46,6 +47,7 @@ class NewRelation(APIView):
     Body: {"node1_id": int, "node2_id": int, "weight": 1|2|3|4|5}
     Validation: only cc→co or co→cp connections are allowed.
     """
+
     authentication_classes = []
     permission_classes = [AllowAny]
 
@@ -75,6 +77,7 @@ class GetNodes(APIView):
     """GET /api/giraph/get_nodes
     Returns all nodes and relations in the graph.
     """
+
     authentication_classes = []
     permission_classes = [AllowAny]
 
@@ -84,7 +87,12 @@ class GetNodes(APIView):
 
         rel_map = {n.id: [] for n in nodes}
         for r in rels:
-            stub = {"node1_id": r.node1_id, "node2_id": r.node2_id, "relation_id": r.id}
+            stub = {
+                "node1_id": r.node1_id,
+                "node2_id": r.node2_id,
+                "relation_id": r.id,
+                "weight": r.weight,
+            }
             if r.node1_id in rel_map:
                 rel_map[r.node1_id].append(stub)
             if r.node2_id in rel_map:
@@ -114,6 +122,7 @@ class UpdateNode(APIView):
     """POST /api/giraph/update_node
     Body: {"node_id": int, "name": str}
     """
+
     authentication_classes = []
     permission_classes = [AllowAny]
 
@@ -141,6 +150,7 @@ class UpdateRelation(APIView):
     """POST /api/giraph/update_relation
     Body: {"relation_id": int, "weight": 1|2|3|4|5}
     """
+
     authentication_classes = []
     permission_classes = [AllowAny]
 
@@ -168,6 +178,7 @@ class DeleteNode(APIView):
     """DELETE /api/giraph/delete_node
     Body: {"node_id": int}
     """
+
     authentication_classes = []
     permission_classes = [AllowAny]
 
@@ -195,6 +206,7 @@ class DeleteRelation(APIView):
     """DELETE /api/giraph/delete_relation
     Body: {"relation_id": int}
     """
+
     authentication_classes = []
     permission_classes = [AllowAny]
 

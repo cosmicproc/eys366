@@ -55,6 +55,7 @@ export function getApiBase(): string {
 export interface NodeRelation {
     node1_id: number;
     node2_id: number;
+    weight: number;
     relation_id: number;
 }
 

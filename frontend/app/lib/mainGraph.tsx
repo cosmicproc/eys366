@@ -148,7 +148,7 @@ const convertToEdges = (data: GetNodesResponse): Edge[] => {
                 id: `e-${relation.relation_id}`,
                 source: sourceId,
                 target: targetId,
-                label: "3",
+                label: String(relation.weight),
                 animated: true,
                 style: {
                     stroke: edgeColor,
