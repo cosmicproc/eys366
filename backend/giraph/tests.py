@@ -5,7 +5,7 @@ from .models import LayerChoices, Node, Relation
 
 
 @pytest.mark.django_db
-def test_NewNode():
+def Test_NewNode():
 	client = APIClient()
 	payload = {"name": "Test Node", "layer": LayerChoices.COURSE_CONTENT}
 	response = client.post("/api/giraph/new_node", payload, format="json")
@@ -21,7 +21,7 @@ def test_NewNode():
 
 
 @pytest.mark.django_db
-def test_NewRelation():
+def Test_NewRelation():
 	# create nodes for a valid cc -> co relation
 	n_cc = Node.objects.create(name="CC 1", layer=LayerChoices.COURSE_CONTENT)
 	n_co = Node.objects.create(name="CO 1", layer=LayerChoices.COURSE_OUTCOME)
@@ -42,7 +42,7 @@ def test_NewRelation():
 
 
 @pytest.mark.django_db
-def test_GetNodes():
+def Test_GetNodes():
 	# setup three nodes and two relations: cc->co and co->po
 	n_cc = Node.objects.create(name="CC 2", layer=LayerChoices.COURSE_CONTENT)
 	n_co = Node.objects.create(name="CO 2", layer=LayerChoices.COURSE_OUTCOME)
