@@ -10,6 +10,8 @@ import {
 } from "@mantine/core";
 import { useState } from "react";
 import { createNode, type NodeLayer } from "./apiClient";
+import { useAuth } from "./AuthContext";
+import { useSearchParams } from "next/navigation";
 
 export default function NewItemButton() {
     const [open, setOpen] = useState(false);
@@ -18,6 +20,10 @@ export default function NewItemButton() {
     const [name, setName] = useState("");
     const [error, setError] = useState<string | null>(null);
     const NAME_MAX = 60;
+
+    const { user } = useAuth();
+    const searchParams = useSearchParams();
+    const courseId = searchParams.get("courseId") ? parseInt(searchParams.get("courseId")!) : undefined;
 
     const reset = () => {
         setType("course_content");
@@ -38,7 +44,8 @@ export default function NewItemButton() {
         }
         try {
             setSaving(true);
-            await createNode(type, trimmed);
+            // Pass courseId if available
+            await createNode(type, trimmed, courseId);
             // Reload the page so data is re-fetched and graph is consistent
             if (typeof window !== "undefined") {
                 window.location.reload();
@@ -47,16 +54,38 @@ export default function NewItemButton() {
             // Fallback for non-browser
             setOpen(false);
             reset();
-        } catch (e: any) {
-            setError(e?.message || "Failed to create node");
+            // Fallback for non-browser
+            setOpen(false);
+            reset();
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : "Failed to create node";
+            setError(msg);
         } finally {
             setSaving(false);
         }
     };
 
+    const options = [
+        {
+            label: "Course Content",
+            value: "course_content",
+        },
+        {
+            label: "Course Outcome",
+            value: "course_outcome",
+        },
+    ];
+
+    if (user?.role === "head") {
+        options.push({
+            label: "Program Outcome",
+            value: "program_outcome",
+        });
+    }
+
     return (
         <>
-            <Button variant="subtle" onClick={() => setOpen(true)} radius="3em">
+            <Button variant="subtle" onClick={() => setOpen(true)}>
                 New Item
             </Button>
             <Modal
@@ -68,21 +97,8 @@ export default function NewItemButton() {
                 <div className="space-y-4">
                     <SegmentedControl
                         value={type}
-                        onChange={(v) => setType(v as any)}
-                        data={[
-                            {
-                                label: "Course Content",
-                                value: "course_content",
-                            },
-                            {
-                                label: "Course Outcome",
-                                value: "course_outcome",
-                            },
-                            {
-                                label: "Program Outcome",
-                                value: "program_outcome",
-                            },
-                        ]}
+                        onChange={(v) => setType(v as NodeLayer)}
+                        data={options}
                     />
                     {error && (
                         <Text c="red" size="sm">

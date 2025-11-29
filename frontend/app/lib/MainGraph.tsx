@@ -22,6 +22,7 @@ import {
     type EdgeChange,
     type Node,
     type NodeChange,
+    type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -33,13 +34,19 @@ import {
     type GetNodesResponse,
 } from "./apiClient";
 import GraphNode from "./GraphNode";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useAuth } from "./AuthContext";
+
+// Define custom node type
+type AppNodeData = { label: string; apiId: number };
+type AppNode = Node<AppNodeData, "graphnode">;
 
 // We'll inject edit/delete handlers via a wrapper component for React Flow nodeTypes
 const createNodeTypes = (
     onEdit: (apiId: number, currentName: string) => void,
     onDelete: (apiId: number, currentName: string) => void
 ) => ({
-    graphnode: (props: any) => (
+    graphnode: (props: NodeProps<AppNode>) => (
         <GraphNode {...props} onEdit={onEdit} onDelete={onDelete} />
     ),
 });
@@ -134,12 +141,10 @@ const convertToEdges = (data: GetNodesResponse): Edge[] => {
             // Skip if we've already created this edge (API returns relations on both ends)
             if (seenRelations.has(relation.relation_id)) return;
             seenRelations.add(relation.relation_id);
-            const sourceId = `${getLayerPrefix(relation.node1_id, data)}-${
-                relation.node1_id
-            }`;
-            const targetId = `${getLayerPrefix(relation.node2_id, data)}-${
-                relation.node2_id
-            }`;
+            const sourceId = `${getLayerPrefix(relation.node1_id, data)}-${relation.node1_id
+                }`;
+            const targetId = `${getLayerPrefix(relation.node2_id, data)}-${relation.node2_id
+                }`;
             const sourceLayer = getLayerPrefix(relation.node1_id, data);
             const edgeColor =
                 sourceLayer === "course_content" ? "#1976d2" : "#388e3c";
@@ -231,40 +236,65 @@ export default function MainGraph() {
     // Click selection state
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
+    const searchParams = useSearchParams();
+    const courseIdParam = searchParams.get("courseId");
+    const courseId = courseIdParam ? parseInt(courseIdParam) : null;
+    const { user, loading: authLoading } = useAuth();
+    const router = useRouter();
+
+    // Redirect if not authenticated
+    useEffect(() => {
+        if (!authLoading && !user) {
+            router.push("/login");
+        }
+    }, [authLoading, user, router]);
+
     // Load initial data from API
     useEffect(() => {
+        if (authLoading || !user) return;
+
         const loadData = async () => {
+            setLoading(true);
             try {
-                const data = await getNodes();
+                // If no course selected and user is lecturer, default to first course
+                let targetCourseId = courseId;
+                if (!targetCourseId && user?.role === "lecturer" && user.courseIds.length > 0) {
+                    targetCourseId = user.courseIds[0];
+                }
+
+                const data = await getNodes(targetCourseId || undefined);
                 setNodes(convertToNodes(data));
                 setEdges(convertToEdges(data));
             } catch (error) {
                 console.error("Failed to load graph data:", error);
-                alert("Failed to load graph data. Please refresh the page.");
+                // alert("Failed to load graph data. Please refresh the page.");
             } finally {
                 setLoading(false);
             }
         };
 
         loadData();
+    }, [user, courseId, authLoading]);
+
+    useEffect(() => {
         // Listen for new node event from header modal
         const handler = (e: Event) => {
             const detail = (e as CustomEvent).detail as
                 | {
-                      id: number;
-                      name: string;
-                      type:
-                          | "course_content"
-                          | "course_outcome"
-                          | "program_outcome";
-                  }
+                    id: number;
+                    name: string;
+                    type:
+                    | "course_content"
+                    | "course_outcome"
+                    | "program_outcome";
+                }
                 | undefined;
             if (!detail) return;
             setNodes((prev) => {
                 const y =
                     80 +
                     prev.filter((n) => n.id.startsWith(detail.type)).length *
-                        100;
+                    100;
                 const xMap = {
                     course_content: 50,
                     course_outcome: 400,
@@ -293,8 +323,8 @@ export default function MainGraph() {
                     detail.type === "course_content"
                         ? Position.Right
                         : detail.type === "course_outcome"
-                        ? Position.Right
-                        : Position.Left;
+                            ? Position.Right
+                            : Position.Left;
                 const targetPosition =
                     detail.type === "course_content"
                         ? Position.Right
@@ -397,7 +427,7 @@ export default function MainGraph() {
         // Open modal to edit existing weight
         setModalMode("edit");
         setEditingEdge(edge);
-        const currentWeight = (edge.data as any)?.weight;
+        const currentWeight = (edge.data as { weight?: number })?.weight;
         const parsed =
             typeof currentWeight === "number"
                 ? currentWeight
@@ -417,26 +447,23 @@ export default function MainGraph() {
 
     const deleteCurrentEdge = async () => {
         if (!editingEdge) return;
-        setModalError(null);
-        const relationId = (editingEdge.data as any)?.relationId as
-            | number
-            | undefined;
+
+        const relationId = (editingEdge.data as { relationId?: number })?.relationId;
         if (!relationId) {
-            // Nothing to delete
+            setEdges((prev) => prev.filter((e) => e.id !== editingEdge.id));
             closeModal();
             return;
         }
+
         setSaving(true);
-        const prevEdges = edges;
-        // Optimistic removal
-        setEdges((prev) => prev.filter((e) => e.id !== editingEdge.id));
         try {
             await deleteRelation(relationId);
+            setEdges((prev) => prev.filter((e) => e.id !== editingEdge.id));
             closeModal();
-        } catch (err: any) {
-            // Revert on failure
-            setEdges(prevEdges);
-            setModalError(`Failed to delete edge: ${err.message}`);
+        } catch (error) {
+            console.error("Failed to delete relation:", error);
+            setModalError("Failed to delete relation");
+        } finally {
             setSaving(false);
         }
     };
@@ -513,7 +540,7 @@ export default function MainGraph() {
                 );
                 closeModal();
             } else if (modalMode === "edit" && editingEdge) {
-                const relationId = (editingEdge.data as any)?.relationId;
+                const relationId = (editingEdge.data as { relationId?: number })?.relationId;
                 if (!relationId) {
                     setModalError("Missing relation id");
                     return;
@@ -523,39 +550,40 @@ export default function MainGraph() {
                     prev.map((e) =>
                         e.id === editingEdge.id
                             ? {
-                                  ...e,
-                                  label: String(weightValue),
-                                  data: {
-                                      ...(e.data || {}),
-                                      weight: weightValue,
-                                  },
-                              }
+                                ...e,
+                                label: String(weightValue),
+                                data: {
+                                    ...(e.data || {}),
+                                    weight: weightValue,
+                                },
+                            }
                             : e
                     )
                 );
                 try {
                     await updateRelation(relationId, weightValue);
-                } catch (err: any) {
+                } catch (err: unknown) {
                     // Revert on error
                     setEdges((prev) =>
                         prev.map((e) =>
                             e.id === editingEdge.id
                                 ? {
-                                      ...e,
-                                      label: String(
-                                          (editingEdge.data as any)?.weight ??
-                                              editingEdge.label
-                                      ),
-                                      data: {
-                                          ...(e.data || {}),
-                                          weight: (editingEdge.data as any)
-                                              ?.weight,
-                                      },
-                                  }
+                                    ...e,
+                                    label: String(
+                                        (editingEdge.data as { weight?: number })?.weight ??
+                                        editingEdge.label
+                                    ),
+                                    data: {
+                                        ...(e.data || {}),
+                                        weight: (editingEdge.data as { weight?: number })
+                                            ?.weight,
+                                    },
+                                }
                                 : e
                         )
                     );
-                    setModalError(`Failed to update relation: ${err.message}`);
+                    const msg = err instanceof Error ? err.message : "Unknown error";
+                    setModalError(`Failed to update relation: ${msg}`);
                     setSaving(false);
                     return;
                 }
@@ -568,6 +596,13 @@ export default function MainGraph() {
 
     // Handlers for node edit/delete from GraphNode
     const handleNodeEdit = (apiId: number, currentName: string) => {
+        // RBAC Check: Lecturers cannot edit Program Outcomes
+        const node = nodes.find(n => (n.data as { apiId: number }).apiId === apiId);
+        if (node?.id.startsWith("program_outcome") && user?.role !== "head") {
+            alert("Only Department Head can edit Program Outcomes");
+            return;
+        }
+
         setEditingNodeId(apiId);
         setEditingNodeName(currentName);
         setNewNodeName(currentName);
@@ -576,6 +611,13 @@ export default function MainGraph() {
     };
 
     const handleNodeDelete = (apiId: number, currentName: string) => {
+        // RBAC Check: Lecturers cannot delete Program Outcomes
+        const node = nodes.find(n => (n.data as { apiId: number }).apiId === apiId);
+        if (node?.id.startsWith("program_outcome") && user?.role !== "head") {
+            alert("Only Department Head can delete Program Outcomes");
+            return;
+        }
+
         setEditingNodeId(apiId);
         setEditingNodeName(currentName);
         setModalError(null);
@@ -599,7 +641,7 @@ export default function MainGraph() {
         const prevNodes = nodes;
         setNodes((prev) =>
             prev.map((n) =>
-                (n.data as any).apiId === editingNodeId
+                (n.data as { apiId: number }).apiId === editingNodeId
                     ? { ...n, data: { ...n.data, label: trimmed } }
                     : n
             )
@@ -609,10 +651,11 @@ export default function MainGraph() {
             const { updateNode } = await import("./apiClient");
             await updateNode(editingNodeId, trimmed);
             setNodeEditModalOpen(false);
-        } catch (e: any) {
+        } catch (e: unknown) {
             // Revert
             setNodes(prevNodes);
-            setModalError(`Failed to rename node: ${e.message}`);
+            const msg = e instanceof Error ? e.message : "Unknown error";
+            setModalError(`Failed to rename node: ${msg}`);
         } finally {
             setSaving(false);
         }
@@ -626,14 +669,14 @@ export default function MainGraph() {
         const prevEdges = edges;
         // Optimistically remove node and any edges referencing it
         setNodes((prev) =>
-            prev.filter((n) => (n.data as any).apiId !== editingNodeId)
+            prev.filter((n) => (n.data as { apiId: number }).apiId !== editingNodeId)
         );
         setEdges((prev) =>
             prev.filter(
                 (e) =>
-                    (nodes.find((n) => n.id === e.source)?.data as any)
+                    (nodes.find((n) => n.id === e.source)?.data as { apiId: number })
                         ?.apiId !== editingNodeId &&
-                    (nodes.find((n) => n.id === e.target)?.data as any)
+                    (nodes.find((n) => n.id === e.target)?.data as { apiId: number })
                         ?.apiId !== editingNodeId
             )
         );
@@ -641,11 +684,12 @@ export default function MainGraph() {
             const { deleteNode } = await import("./apiClient");
             await deleteNode(editingNodeId);
             setNodeDeleteModalOpen(false);
-        } catch (e: any) {
+        } catch (e: unknown) {
             // Revert
             setNodes(prevNodes);
             setEdges(prevEdges);
-            setModalError(`Failed to delete node: ${e.message}`);
+            const msg = e instanceof Error ? e.message : "Unknown error";
+            setModalError(`Failed to delete node: ${msg}`);
         } finally {
             setSaving(false);
         }
@@ -733,10 +777,10 @@ export default function MainGraph() {
                         "opacity 200ms ease, box-shadow 200ms ease, border-color 200ms ease",
                     boxShadow: isSelected
                         ? "0 0 0 4px rgba(255,165,0,0.4)"
-                        : (n.style as any)?.boxShadow,
+                        : (n.style as React.CSSProperties)?.boxShadow,
                     border: isSelected
                         ? "2px solid #ff9800"
-                        : (n.style as any)?.border,
+                        : (n.style as React.CSSProperties)?.border,
                 },
             } as Node;
         });
@@ -836,11 +880,11 @@ export default function MainGraph() {
                         value={weightValue}
                         onChange={(val) => {
                             if (val === "" || typeof val === "number") {
-                                setWeightValue(val as any);
+                                setWeightValue(val);
                             } else {
-                                const n = parseInt(val as any, 10);
+                                const n = parseInt(String(val), 10);
                                 setWeightValue(
-                                    Number.isFinite(n) ? (n as any) : ""
+                                    Number.isFinite(n) ? n : ""
                                 );
                             }
                         }}
@@ -926,7 +970,7 @@ export default function MainGraph() {
                         </Text>
                     )}
                     <Text>
-                        Are you sure you want to delete "{editingNodeName}"?
+                        Are you sure you want to delete &quot;{editingNodeName}&quot;?
                         This will remove related edges.
                     </Text>
                     <Group justify="flex-end" mt="md">
