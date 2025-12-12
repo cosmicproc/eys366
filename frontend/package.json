@@ -13,7 +13,7 @@
     "@mantine/form": "^8.3.6",
     "@mantine/hooks": "^8.3.6",
     "@xyflow/react": "^12.9.2",
-    "next": "15.5.4",
+    "next": "15.5.8",
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },
