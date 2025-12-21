@@ -10,4 +10,5 @@ urlpatterns = [
     path('update_relation', views.UpdateRelation.as_view()),
     path('delete_node', views.DeleteNode.as_view()),
     path('delete_relation', views.DeleteRelation.as_view()),
+    
 ]

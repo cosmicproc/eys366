@@ -1,61 +1,104 @@
 "use client";
 
-import { Button, Card, Container, Text, Title } from "@mantine/core";
+import { Button, Card, Container, Text, Title, Stack, TextInput, PasswordInput, Avatar } from "@mantine/core";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../lib/AuthContext";
+import { IconSchool, IconUser, IconLock } from "@tabler/icons-react";
+import { useState } from "react";
 
 export default function LoginPage() {
     const { login } = useAuth();
     const router = useRouter();
+    const [username, setUsername] = useState("");
+    const [password, setPassword] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
 
-    const handleLogin = async (username: string) => {
+    const handleLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError("");
         try {
-            await login(username);
+            await login(username, password);
             router.push("/");
         } catch {
-            alert("Login failed");
+            setError("Invalid username or password");
+        } finally {
+            setLoading(false);
         }
     };
 
     return (
-        <Container size="xs" className="h-screen flex items-center justify-center">
-            <Card shadow="sm" padding="lg" radius="md" withBorder className="w-full">
-                <Title order={2} className="text-center mb-6">
-                    Login to Giraph
-                </Title>
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
+            <Container size="xs" className="w-full">
+                <Card shadow="xl" padding="xl" radius="lg" className="backdrop-blur-sm bg-white/90">
+                    <form onSubmit={handleLogin}>
+                        <Stack gap="lg">
+                            {/* Header */}
+                            <div className="text-center">
+                                <Avatar
+                                    size="xl"
+                                    radius="xl"
+                                    className="mx-auto mb-4"
+                                    variant="gradient"
+                                    gradient={{ from: 'indigo', to: 'cyan', deg: 45 }}
+                                >
+                                    <IconSchool size={40} />
+                                </Avatar>
+                                <Title order={1} className="mb-2 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                                    EYS-366
+                                </Title>
+                                <Text size="md" c="dimmed">
+                                    Educational Management System
+                                </Text>
+                            </div>
 
-                <Text size="sm" c="dimmed" className="text-center mb-4">
-                    Select a role to simulate login:
-                </Text>
+                            {/* Error Message */}
+                            {error && (
+                                <Text c="red" size="sm" ta="center">
+                                    {error}
+                                </Text>
+                            )}
 
-                <div className="space-y-3">
-                    <Button
-                        fullWidth
-                        variant="light"
-                        onClick={() => handleLogin("lecturer_a")}
-                    >
-                        Login as Lecturer A (Course 1)
-                    </Button>
+                            {/* Login Form */}
+                            <TextInput
+                                label="Username"
+                                placeholder="Enter your username"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                                leftSection={<IconUser size={16} />}
+                                required
+                                size="md"
+                            />
 
-                    <Button
-                        fullWidth
-                        variant="light"
-                        color="orange"
-                        onClick={() => handleLogin("lecturer_b")}
-                    >
-                        Login as Lecturer B (Course 2)
-                    </Button>
+                            <PasswordInput
+                                label="Password"
+                                placeholder="Enter your password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                leftSection={<IconLock size={16} />}
+                                required
+                                size="md"
+                            />
 
-                    <Button
-                        fullWidth
-                        variant="filled"
-                        color="grape"
-                        onClick={() => handleLogin("head")}
-                    >
-                        Login as Department Head
-                    </Button>
-                </div>
-            </Card>
-        </Container>
+                            <Button
+                                type="submit"
+                                fullWidth
+                                size="md"
+                                loading={loading}
+                                gradient={{ from: 'blue', to: 'purple', deg: 90 }}
+                                variant="gradient"
+                            >
+                                Login
+                            </Button>
+
+                            <Text size="xs" c="dimmed" className="text-center">
+                                This is a simulation environment for demonstration purposes
+                            </Text>
+                        </Stack>
+                    </form>
+                </Card>
+            </Container>
+        </div>
     );
 }

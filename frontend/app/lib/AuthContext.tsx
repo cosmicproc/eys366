@@ -1,24 +1,27 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { getUserInfo, login as apiLogin, logout as apiLogout } from "./apiClient";
 
 interface User {
     id: number;
     username: string;
-    role: "lecturer" | "head";
-    name: string;
-    courseIds: number[];
+    email: string;
+    role: string;
+    first_name?: string;
+    last_name?: string;
+    courseIds?: number[];
 }
 
 interface AuthContextType {
     user: User | null;
     loading: boolean;
-    login: (username: string) => Promise<void>;
+    login: (username: string, password: string) => Promise<void>;
     logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
@@ -26,13 +29,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         const initAuth = async () => {
-            const token = localStorage.getItem("giraph_token");
+            const token = localStorage.getItem("auth_token");
             if (token) {
                 try {
-                    const userData = await getUserInfo();
-                    setUser(userData);
+                    const response = await fetch(`${API_URL}/api/users/me/`, {
+                        headers: {
+                            "Authorization": `Token ${token}`,
+                        },
+                    });
+                    if (response.ok) {
+                        const userData = await response.json();
+                        setUser(userData);
+                    } else {
+                        localStorage.removeItem("auth_token");
+                    }
                 } catch {
-                    localStorage.removeItem("giraph_token");
+                    localStorage.removeItem("auth_token");
                 }
             }
             setLoading(false);
@@ -40,19 +52,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         initAuth();
     }, []);
 
-    const login = async (username: string) => {
-        const { token, user } = await apiLogin(username);
-        localStorage.setItem("giraph_token", token);
-        setUser(user);
+    const login = async (username: string, password: string) => {
+        const response = await fetch(`${API_URL}/api/login/`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ username, password }),
+        });
+
+        if (!response.ok) {
+            throw new Error("Login failed");
+        }
+
+        const data = await response.json();
+        localStorage.setItem("auth_token", data.token);
+        setUser(data.user);
     };
 
     const logout = async () => {
         try {
-            await apiLogout();
+            const token = localStorage.getItem("auth_token");
+            if (token) {
+                await fetch(`${API_URL}/api/logout/`, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Token ${token}`,
+                    },
+                });
+            }
         } finally {
-            localStorage.removeItem("giraph_token");
+            localStorage.removeItem("auth_token");
             setUser(null);
-            // Redirect to login or home
             window.location.href = "/login";
         }
     };
