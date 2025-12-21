@@ -8,10 +8,10 @@ import {
     Text,
     TextInput,
 } from "@mantine/core";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { createNode, type NodeLayer } from "./apiClient";
 import { useAuth } from "./AuthContext";
-import { useSearchParams } from "next/navigation";
 
 export default function NewItemButton() {
     const [open, setOpen] = useState(false);
@@ -23,7 +23,7 @@ export default function NewItemButton() {
 
     const { user } = useAuth();
     const searchParams = useSearchParams();
-    const courseId = searchParams.get("courseId") ? parseInt(searchParams.get("courseId")!) : undefined;
+    const courseId = searchParams.get("courseId") || undefined;
 
     const reset = () => {
         setType("course_content");
@@ -33,6 +33,12 @@ export default function NewItemButton() {
 
     const onSubmit = async () => {
         setError(null);
+
+        if (!courseId) {
+            setError("Please select a course first before adding items");
+            return;
+        }
+
         const trimmed = name.trim();
         if (!trimmed) {
             setError("Name cannot be empty");
@@ -44,7 +50,7 @@ export default function NewItemButton() {
         }
         try {
             setSaving(true);
-            // Pass courseId if available
+            // courseId is required
             await createNode(type, trimmed, courseId);
             // Reload the page so data is re-fetched and graph is consistent
             if (typeof window !== "undefined") {
@@ -54,11 +60,9 @@ export default function NewItemButton() {
             // Fallback for non-browser
             setOpen(false);
             reset();
-            // Fallback for non-browser
-            setOpen(false);
-            reset();
         } catch (e: unknown) {
-            const msg = e instanceof Error ? e.message : "Failed to create node";
+            const msg =
+                e instanceof Error ? e.message : "Failed to create node";
             setError(msg);
         } finally {
             setSaving(false);
@@ -85,7 +89,14 @@ export default function NewItemButton() {
 
     return (
         <>
-            <Button variant="subtle" onClick={() => setOpen(true)}>
+            <Button
+                variant="subtle"
+                onClick={() => setOpen(true)}
+                disabled={!courseId}
+                title={
+                    !courseId ? "Please select a course first" : "Add new item"
+                }
+            >
                 New Item
             </Button>
             <Modal

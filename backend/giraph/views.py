@@ -1,5 +1,6 @@
 from django.db import IntegrityError
 from django.http import JsonResponse
+from programs.models import Program
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -22,7 +23,7 @@ def ping(request):
 
 class NewNode(APIView):
     """POST /api/giraph/new_node
-    Body: {"name": str, "layer": "course_content"|"course_outcome"|"program_outcome"}
+    Body: {"name": str, "layer": "course_content"|"course_outcome"|"program_outcome", "course_id": str (UUID)}
     """
 
     authentication_classes = []
@@ -32,9 +33,19 @@ class NewNode(APIView):
         ser = NewNodeSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
 
+        course_id = ser.validated_data["course_id"]
+        try:
+            course = Program.objects.get(pk=course_id)
+        except Program.DoesNotExist:
+            return Response(
+                {"detail": f"Course {course_id} not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
         node = Node.objects.create(
             name=ser.validated_data["name"],
             layer=ser.validated_data["layer"],
+            course=course,
         )
         return Response(
             {"message": "Node created.", "node_id": node.id},
@@ -74,16 +85,35 @@ class NewRelation(APIView):
 
 
 class GetNodes(APIView):
-    """GET /api/giraph/get_nodes
-    Returns all nodes and relations in the graph.
+    """GET /api/giraph/get_nodes?course_id=<id>
+    Returns all nodes and relations in the graph, optionally filtered by course.
     """
 
     authentication_classes = []
     permission_classes = [AllowAny]
 
     def get(self, request):
-        nodes = list(Node.objects.all().only("id", "name", "layer"))
-        rels = list(Relation.objects.all().only("id", "node1_id", "node2_id"))
+        course_id = request.query_params.get("course_id")
+
+        # Filter nodes by course if provided
+        if course_id:
+            nodes = list(
+                Node.objects.filter(course_id=course_id).only(
+                    "id", "name", "layer", "course_id"
+                )
+            )
+            # Only get relations between nodes in this course
+            node_ids = [n.id for n in nodes]
+            rels = list(
+                Relation.objects.filter(
+                    node1_id__in=node_ids, node2_id__in=node_ids
+                ).only("id", "node1_id", "node2_id", "weight")
+            )
+        else:
+            nodes = list(Node.objects.all().only("id", "name", "layer", "course_id"))
+            rels = list(
+                Relation.objects.all().only("id", "node1_id", "node2_id", "weight")
+            )
 
         rel_map = {n.id: [] for n in nodes}
         for r in rels:
@@ -228,3 +258,89 @@ class DeleteRelation(APIView):
 
         rel.delete()
         return Response({"message": "Relation deleted."}, status=status.HTTP_200_OK)
+
+
+class GetProgramOutcomes(APIView):
+    """GET /api/giraph/get_program_outcomes
+    Returns all program outcomes (global, not course-specific)
+    """
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        outcomes = list(
+            Node.objects.filter(layer=LayerChoices.PROGRAM_OUTCOME).values("id", "name")
+        )
+        return Response(
+            {"program_outcomes": outcomes},
+            status=status.HTTP_200_OK,
+        )
+
+
+class CreateProgramOutcome(APIView):
+    """POST /api/giraph/create_program_outcome
+    Body: {"name": str}
+    Only department heads can create program outcomes
+    """
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        name = request.data.get("name", "").strip()
+        if not name:
+            return Response(
+                {"detail": "name is required."},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        if len(name) > 255:
+            return Response(
+                {"detail": "name must be at most 255 characters."},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        outcome = Node.objects.create(
+            name=name,
+            layer=LayerChoices.PROGRAM_OUTCOME,
+            course=None,  # Program outcomes are global
+        )
+        return Response(
+            {"message": "Program outcome created.", "id": outcome.id},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class DeleteProgramOutcome(APIView):
+    """DELETE /api/giraph/delete_program_outcome
+    Body: {"outcome_id": int}
+    Only department heads can delete program outcomes
+    """
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def delete(self, request):
+        outcome_id = request.data.get("outcome_id")
+        if not outcome_id:
+            return Response(
+                {"detail": "outcome_id is required."},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        try:
+            outcome = Node.objects.get(
+                pk=outcome_id, layer=LayerChoices.PROGRAM_OUTCOME
+            )
+        except Node.DoesNotExist:
+            return Response(
+                {"detail": f"Program outcome {outcome_id} not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        outcome.delete()
+        return Response(
+            {"message": "Program outcome deleted."},
+            status=status.HTTP_200_OK,
+        )

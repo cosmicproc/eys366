@@ -7,6 +7,9 @@ from .models import LayerChoices, Node, Relation
 class NewNodeSerializer(serializers.Serializer):
     name = serializers.CharField(min_length=1, max_length=255)
     layer = serializers.ChoiceField(choices=[c[0] for c in LayerChoices.choices])
+    course_id = serializers.CharField(
+        required=True
+    )  # Changed from IntegerField to CharField for UUID support
 
 
 # /api/giraph/update_node

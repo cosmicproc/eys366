@@ -3,13 +3,13 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
 interface User {
-    id: number;
+    id: string;
     username: string;
     email: string;
     role: string;
     first_name?: string;
     last_name?: string;
-    courseIds?: number[];
+    courseIds?: string[];
 }
 
 interface AuthContextType {
