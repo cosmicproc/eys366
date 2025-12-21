@@ -71,7 +71,9 @@ export interface GetNodesResponse {
     program_outcomes: NodeData[];
 }
 
-export async function getNodes(courseId?: string | number): Promise<GetNodesResponse> {
+export async function getNodes(
+    courseId?: string | number
+): Promise<GetNodesResponse> {
     const url = courseId
         ? `${getApiBase()}/get_nodes?courseId=${courseId}`
         : `${getApiBase()}/get_nodes`;
@@ -322,7 +324,10 @@ export async function getCourses(): Promise<Course[]> {
         `${getApiBase().replace("/giraph", "/programs/list_courses")}`,
         {
             method: "GET",
-            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+            headers: {
+                "Content-Type": "application/json",
+                ...getAuthHeaders(),
+            },
         }
     );
     return handleResponse<Course[]>(response);

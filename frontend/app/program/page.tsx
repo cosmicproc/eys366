@@ -110,11 +110,16 @@ export default function ProgramPage() {
                 getProgramOutcomes(),
             ]);
             // Transform lecturers to match Lecturer interface
-            const transformedLecturers = lecturesData.lecturers.map((l: any) => ({
-                id: l.id,
-                username: l.username,
-                name: l.first_name && l.last_name ? `${l.first_name} ${l.last_name}` : l.username,
-            }));
+            const transformedLecturers = lecturesData.lecturers.map(
+                (l: any) => ({
+                    id: l.id,
+                    username: l.username,
+                    name:
+                        l.first_name && l.last_name
+                            ? `${l.first_name} ${l.last_name}`
+                            : l.username,
+                })
+            );
             setLecturers(transformedLecturers);
             setOutcomes(outcomesData);
 

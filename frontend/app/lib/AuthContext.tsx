@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 try {
                     const response = await fetch(`${API_URL}/api/users/me/`, {
                         headers: {
-                            "Authorization": `Token ${token}`,
+                            Authorization: `Token ${token}`,
                         },
                     });
                     if (response.ok) {
@@ -77,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 await fetch(`${API_URL}/api/logout/`, {
                     method: "POST",
                     headers: {
-                        "Authorization": `Token ${token}`,
+                        Authorization: `Token ${token}`,
                     },
                 });
             }

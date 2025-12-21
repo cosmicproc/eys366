@@ -20,7 +20,7 @@ import {
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { getNodes, getCourses, type Course } from "./lib/apiClient";
+import { getCourses, getNodes, type Course } from "./lib/apiClient";
 import { useAuth } from "./lib/AuthContext";
 
 export default function Home() {
@@ -164,7 +164,13 @@ export default function Home() {
             </Title>
             <Grid mb="xl">
                 <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
-                    <Card shadow="sm" padding="lg" withBorder h="100%" minh={160}>
+                    <Card
+                        shadow="sm"
+                        padding="lg"
+                        withBorder
+                        h="100%"
+                        minh={160}
+                    >
                         {loadingStats ? (
                             <Skeleton height={80} />
                         ) : (
@@ -187,7 +193,13 @@ export default function Home() {
                     </Card>
                 </Grid.Col>
                 <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
-                    <Card shadow="sm" padding="lg" withBorder h="100%" minh={160}>
+                    <Card
+                        shadow="sm"
+                        padding="lg"
+                        withBorder
+                        h="100%"
+                        minh={160}
+                    >
                         {loadingStats ? (
                             <Skeleton height={80} />
                         ) : (
@@ -210,7 +222,13 @@ export default function Home() {
                     </Card>
                 </Grid.Col>
                 <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
-                    <Card shadow="sm" padding="lg" withBorder h="100%" minh={160}>
+                    <Card
+                        shadow="sm"
+                        padding="lg"
+                        withBorder
+                        h="100%"
+                        minh={160}
+                    >
                         {loadingStats ? (
                             <Skeleton height={80} />
                         ) : (
@@ -233,7 +251,13 @@ export default function Home() {
                     </Card>
                 </Grid.Col>
                 <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
-                    <Card shadow="sm" padding="lg" withBorder h="100%" minh={160}>
+                    <Card
+                        shadow="sm"
+                        padding="lg"
+                        withBorder
+                        h="100%"
+                        minh={160}
+                    >
                         {loadingStats ? (
                             <Skeleton height={80} />
                         ) : (
@@ -346,7 +370,9 @@ export default function Home() {
                                     key={courseId}
                                     variant="light"
                                     onClick={() =>
-                                        router.push(`/graph?courseId=${courseId}`)
+                                        router.push(
+                                            `/graph?courseId=${courseId}`
+                                        )
                                     }
                                 >
                                     {course?.name || `Course ${courseId}`}
