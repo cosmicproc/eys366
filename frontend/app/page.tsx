@@ -32,7 +32,6 @@ export default function Home() {
     courseContents: 0,
     courseOutcomes: 0,
     programOutcomes: 0,
-    totalRelations: 0,
   });
   const [loadingStats, setLoadingStats] = useState(true);
 
@@ -58,18 +57,10 @@ export default function Home() {
 
       const data = await getNodes(courseId);
 
-      const totalRelations =
-        [
-          ...data.course_contents,
-          ...data.course_outcomes,
-          ...data.program_outcomes,
-        ].reduce((sum, node) => sum + node.relations.length, 0) / 2; // Divide by 2 since relations are counted twice
-
       setStats({
         courseContents: data.course_contents.length,
         courseOutcomes: data.course_outcomes.length,
         programOutcomes: data.program_outcomes.length,
-        totalRelations: Math.floor(totalRelations),
       });
     } catch (error) {
       console.error("Failed to load statistics:", error);
@@ -150,7 +141,7 @@ export default function Home() {
             },
           },
           {
-            title: "Course Outcomes",
+            title: "Outcomes",
             description: "Manage learning outcomes",
             icon: <IconTarget size={24} />,
             color: "violet",
@@ -249,25 +240,6 @@ export default function Home() {
                 </Group>
                 <Text size="xl" fw={700}>
                   {stats.programOutcomes}
-                </Text>
-              </>
-            )}
-          </Card>
-        </Grid.Col>
-        <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
-          <Card shadow="sm" padding="lg" withBorder>
-            {loadingStats ? (
-              <Skeleton height={80} />
-            ) : (
-              <>
-                <Group justify="space-between" mb="xs">
-                  <Text size="sm" c="dimmed">
-                    Total Relations
-                  </Text>
-                  <IconGraph size={20} color="var(--mantine-color-orange-6)" />
-                </Group>
-                <Text size="xl" fw={700}>
-                  {stats.totalRelations}
                 </Text>
               </>
             )}
