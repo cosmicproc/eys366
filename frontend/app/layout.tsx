@@ -1,6 +1,6 @@
 import "@mantine/core/styles.css";
 import type { Metadata } from "next";
-import { Libre_Baskerville } from "next/font/google";
+import { Outfit } from "next/font/google";
 import "./globals.css";
 
 import {
@@ -10,8 +10,7 @@ import {
 } from "@mantine/core";
 import RootUILayout from "./lib/layoutUI";
 
-const libreBaskerville = Libre_Baskerville({
-    variable: "--font-librebaskerville-sans",
+const libreBaskerville = Outfit({
     subsets: ["latin"],
     weight: ["400", "700"],
 });
@@ -27,11 +26,7 @@ export default function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <html
-            lang="en"
-            {...mantineHtmlProps}
-            className={libreBaskerville.variable}
-        >
+        <html lang="en" {...mantineHtmlProps}>
             <head>
                 <ColorSchemeScript />
             </head>
