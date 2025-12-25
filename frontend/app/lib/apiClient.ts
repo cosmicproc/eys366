@@ -71,7 +71,9 @@ export interface GetNodesResponse {
     program_outcomes: NodeData[];
 }
 
-export async function getNodes(courseId?: number): Promise<GetNodesResponse> {
+export async function getNodes(
+    courseId?: string | number
+): Promise<GetNodesResponse> {
     const url = courseId
         ? `${getApiBase()}/get_nodes?courseId=${courseId}`
         : `${getApiBase()}/get_nodes`;
@@ -150,12 +152,12 @@ export type NodeLayer = "course_content" | "course_outcome" | "program_outcome";
 export async function createNode(
     layer: NodeLayer,
     name: string,
-    courseId?: number
+    courseId?: string | number
 ): Promise<{ message: string; id: number }> {
     const response = await fetch(`${getApiBase()}/new_node`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-        body: JSON.stringify({ layer, name, courseId }),
+        body: JSON.stringify({ layer, name, course_id: courseId }),
     });
     return handleResponse<{ message: string; id: number }>(response);
 }
@@ -168,12 +170,17 @@ function getAuthHeaders(): Record<string, string> {
     return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-export async function login(username: string): Promise<{ token: string; user: User }> {
-    const response = await fetch(`${getApiBase().replace("/giraph", "/auth")}/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username }),
-    });
+export async function login(
+    username: string
+): Promise<{ token: string; user: User }> {
+    const response = await fetch(
+        `${getApiBase().replace("/giraph", "/auth")}/login`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username }),
+        }
+    );
     return handleResponse<{ token: string; user: User }>(response);
 }
 
@@ -185,31 +192,143 @@ export async function logout(): Promise<void> {
 }
 
 export async function getUserInfo(): Promise<User> {
-    const response = await fetch(`${getApiBase().replace("/giraph", "/auth")}/user-info`, {
-        headers: { ...getAuthHeaders() },
-    });
+    const response = await fetch(
+        `${getApiBase().replace("/giraph", "/auth")}/user-info`,
+        {
+            headers: { ...getAuthHeaders() },
+        }
+    );
     return handleResponse<User>(response);
 }
 
 export async function getProgramInfo(): Promise<{ lecturers: User[] }> {
-    const response = await fetch(`${getApiBase().replace("/giraph", "/program")}/program-info`, {
-        headers: { ...getAuthHeaders() },
-    });
+    const response = await fetch(
+        `${getApiBase().replace("/giraph", "/program")}/program-info`,
+        {
+            headers: { ...getAuthHeaders() },
+        }
+    );
     return handleResponse<{ lecturers: User[] }>(response);
 }
 
 export interface User {
-    id: number;
+    id: string;
     username: string;
     role: "lecturer" | "head";
     name: string;
-    courseIds: number[];
+    courseIds: string[];
 }
 
 export async function updateLecturer(id: number, name: string): Promise<void> {
-    await fetch(`${getApiBase().replace("/giraph", "/program")}/update_lecturer`, {
-        method: "PUT",
+    await fetch(
+        `${getApiBase().replace("/giraph", "/program")}/update_lecturer`,
+        {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+                ...getAuthHeaders(),
+            },
+            body: JSON.stringify({ id, name }),
+        }
+    );
+}
+// Program Outcomes Management
+export async function getProgramOutcomes(): Promise<
+    { id: number; name: string }[]
+> {
+    const response = await fetch(`${getApiBase()}/get_program_outcomes`, {
+        method: "GET",
         headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-        body: JSON.stringify({ id, name }),
     });
+    const data = await handleResponse<{
+        program_outcomes: { id: number; name: string }[];
+    }>(response);
+    return data.program_outcomes;
+}
+
+export async function createProgramOutcome(
+    name: string
+): Promise<{ id: number }> {
+    const response = await fetch(`${getApiBase()}/create_program_outcome`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ name }),
+    });
+    return handleResponse<{ id: number }>(response);
+}
+
+export async function deleteProgramOutcome(
+    outcomeId: number
+): Promise<{ message: string }> {
+    const response = await fetch(`${getApiBase()}/delete_program_outcome`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ outcome_id: outcomeId }),
+    });
+    return handleResponse<{ message: string }>(response);
+}
+
+export async function createLecturer(data: {
+    username: string;
+    email: string;
+    name: string;
+    university: string;
+    department: string;
+    password?: string;
+}): Promise<User> {
+    const response = await fetch(
+        `${getApiBase().replace("/giraph", "/users/create_lecturer/")}`,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                ...getAuthHeaders(),
+            },
+            body: JSON.stringify(data),
+        }
+    );
+    return handleResponse<User>(response);
+}
+
+export async function assignLecturerToCourse(
+    courseId: string,
+    lecturerId: string
+): Promise<{ id: string; name: string }> {
+    const response = await fetch(
+        `${getApiBase().replace("/giraph", "/programs/assign_lecturer")}`,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                ...getAuthHeaders(),
+            },
+            body: JSON.stringify({
+                course_id: courseId,
+                lecturer_id: lecturerId,
+            }),
+        }
+    );
+    return handleResponse<{ id: string; name: string }>(response);
+}
+
+export interface Course {
+    id: string;
+    name: string;
+    lecturer?: string;
+    university?: string;
+    department?: string;
+}
+
+export async function getCourses(): Promise<Course[]> {
+    const response = await fetch(
+        `${getApiBase().replace("/giraph", "/programs/list_courses")}`,
+        {
+            method: "GET",
+            headers: {
+                "Content-Type": "application/json",
+                ...getAuthHeaders(),
+            },
+        }
+    );
+    return handleResponse<Course[]>(response);
 }

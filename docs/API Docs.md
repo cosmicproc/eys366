@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
 # API Docs
 
 ## Giraph
@@ -10,82 +8,82 @@ Graph view of our app.
 
 `/api/giraph/get_nodes`
 
--   Description: Get all nodes and their data.
--   Auth required
--   Request: None
--   Response:
-    ```json
-    {
-    "course_contents" : { id: int, name: str, relations: { "node1_id": int, "node2_id": int, "relation_id": int }[] }[],
-    "course_outcomes" : { id: int, name: str, relations: { "node1_id": int, "node2_id": int, "relation_id": int }[] }[],
-    "program_outcomes" : { id: int, name: str, relations: { "node1_id": int, "node2_id": int, "relation_id": int }[] }[]
-    }
-    ```
+- Description: Get all nodes and their data.
+- Auth required
+- Request: None
+- Response:
+  ```json
+  {
+  "course_contents" : { id: int, name: str, relations: { "node1_id": int, "node2_id": int, "relation_id": int }[] }[],
+  "course_outcomes" : { id: int, name: str, relations: { "node1_id": int, "node2_id": int, "relation_id": int }[] }[],
+  "program_outcomes" : { id: int, name: str, relations: { "node1_id": int, "node2_id": int, "relation_id": int }[] }[]
+  }
+  ```
 
 ### POST
 
 `/api/giraph/new_node`
 
--   Description: Create new node.
--   Auth required
--   Request
-    ```json
-    {
-    "name": str, "layer": Category("course_content", "course_outcome", "program_outcome")
-    }
-    ```
-    -   Response: Success message
+- Description: Create new node.
+- Auth required
+- Request
+  ```json
+  {
+  "name": str, "layer": Category("course_content", "course_outcome", "program_outcome")
+  }
+  ```
+  - Response: Success message
 
 ---
 
 `/api/giraph/new_relation`
 
--   Description: Create new edge between 2 nodes.
--   Auth required
--   Validation: connection between nodes are only available if (cc to co) or (co to cp).
--   Request:
-    ```json
-    {
-    "node1_id" : int, "node2_id" : int, "weight" : Category(1,2,3,4,5)
-    }
-    ```
--   Response: Success message
+- Description: Create new edge between 2 nodes.
+- Auth required
+- Validation: connection between nodes are only available if (cc to co) or (co to cp).
+- Request:
+  ```json
+  {
+  "node1_id" : int, "node2_id" : int, "weight" : Category(1,2,3,4,5)
+  }
+  ```
+- Response: Success message
 
 ---
 
 `/api/giraph/update_node`
 
--   Description: Update new node.
--   Auth required
--   Request
-    ```json
-    {
-    "name": str, "node_id" : int)
-    }
-    ```
-    -   Response: Successful update message
+- Description: Update new node.
+- Auth required
+- Request
+  ```json
+  {
+  "name": str, "node_id" : int)
+  }
+  ```
+  - Response: Successful update message
 
 ---
 
 `/api/giraph/update_relation`
 
--   Description: Create new edge between 2 nodes.
--   Auth required
--   Validation: connection between nodes are only available if (cc to co) or (co to cp).
--   Request:
-    ```json
-    {
-    "weight": Category(1,2,3,4,5), "relation_id" : int
-    }
-    ```
--   Response: Success message
+- Description: Create new edge between 2 nodes.
+- Auth required
+- Validation: connection between nodes are only available if (cc to co) or (co to cp).
+- Request:
+  ```json
+  {
+  "weight": Category(1,2,3,4,5), "relation_id" : int
+  }
+  ```
+- Response: Success message
 
 ### DELETE
 
 `/api/giraph/delete_node`
 
--   **Description:** delete existing node.
--   Auth required
+- **Description:** delete existing node.
+- Auth required
 
 ```json
 {
@@ -95,120 +93,13 @@ Graph view of our app.
 
 `/api/giraph/delete_relation`
 
--   **Description:** delete existing relation.
--   Auth required
+- **Description:** delete existing relation.
+- Auth required
 
 ```json
 {
   "relation_id": int
 }
-<<<<<<< HEAD
-=======
-=======
->>>>>>> d22eaff8bd59138f113d6d676da578b5d4fbc67c
-# API Docs
-
-## Giraph
-
-Graph view of our app.
-
-### GET
-
-`/api/giraph/get_nodes`
-
--   Description: Get all nodes and their data.
--   Auth required
--   Request: None
--   Response:
-    ```json
-    {
-    "course_contents" : { id: int, name: str, relations: { "node1_id": int, "node2_id": int, "relation_id": int }[] }[],
-    "course_outcomes" : { id: int, name: str, relations: { "node1_id": int, "node2_id": int, "relation_id": int }[] }[],
-    "program_outcomes" : { id: int, name: str, relations: { "node1_id": int, "node2_id": int, "relation_id": int }[] }[]
-    }
-    ```
-
-### POST
-
-`/api/giraph/new_node`
-
--   Description: Create new node.
--   Auth required
--   Request
-    ```json
-    {
-    "name": str, "layer": Category("course_content", "course_outcome", "program_outcome")
-    }
-    ```
-    -   Response: Success message
-
----
-
-`/api/giraph/new_relation`
-
--   Description: Create new edge between 2 nodes.
--   Auth required
--   Validation: connection between nodes are only available if (cc to co) or (co to cp).
--   Request:
-    ```json
-    {
-    "node1_id" : int, "node2_id" : int, "weight" : Category(1,2,3,4,5)
-    }
-    ```
--   Response: Success message
-
----
-
-`/api/giraph/update_node`
-
--   Description: Update new node.
--   Auth required
--   Request
-    ```json
-    {
-    "name": str, "node_id" : int)
-    }
-    ```
-    -   Response: Successful update message
-
----
-
-`/api/giraph/update_relation`
-
--   Description: Create new edge between 2 nodes.
--   Auth required
--   Validation: connection between nodes are only available if (cc to co) or (co to cp).
--   Request:
-    ```json
-    {
-    "weight": Category(1,2,3,4,5), "relation_id" : int
-    }
-    ```
--   Response: Success message
-
-### DELETE
-
-`/api/giraph/delete_node`
-
--   **Description:** delete existing node.
--   Auth required
-```json
-{
-  "node_id": int
-}
-```
-
-`/api/giraph/delete_relation`
--   **Description:** delete existing relation.
--   Auth required
-```json
-{
-  "relation_id": int
-}
-<<<<<<< HEAD
->>>>>>> temp-local
-```
-=======
 ```
 
 ## Configuration: API Base URL
@@ -229,7 +120,3 @@ setApiBase("https://backend.example.com/api/giraph");
 ```
 
 All client functions (`getNodes`, `createRelation`, `updateRelation`, `updateNode`, `deleteRelation`, `deleteNode`, `createNode`) derive the base using `getApiBase()`.
->>>>>>> origin/dev
-=======
-```
->>>>>>> d22eaff8bd59138f113d6d676da578b5d4fbc67c
