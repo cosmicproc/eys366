@@ -6,9 +6,25 @@ from .models import User
 
 class UserSerializer(serializers.ModelSerializer):
     courseIds = serializers.SerializerMethodField()
+    courses = serializers.SerializerMethodField()
 
     def get_courseIds(self, obj):
         # Return list of course IDs (as strings for UUIDs) where user is the lecturer
+        if obj.role == "lecturer":
+            return [
+                str(course_id)
+                for course_id in Program.objects.filter(lecturer=obj).values_list(
+                    "id", flat=True
+                )
+            ]
+        # Department heads can access all courses
+        return [
+            str(course_id)
+            for course_id in Program.objects.all().values_list("id", flat=True)
+        ]
+
+    def get_courses(self, obj):
+        # Return list of course IDs as integers for filtering
         if obj.role == "lecturer":
             return list(
                 Program.objects.filter(lecturer=obj).values_list("id", flat=True)
@@ -31,5 +47,6 @@ class UserSerializer(serializers.ModelSerializer):
             "is_staff",
             "date_joined",
             "courseIds",
+            "courses",
         ]
-        read_only_fields = ["id", "date_joined", "courseIds"]
+        read_only_fields = ["id", "date_joined", "courseIds", "courses"]
