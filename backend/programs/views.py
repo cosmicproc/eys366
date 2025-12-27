@@ -21,6 +21,48 @@ def program_info(request):
     return Response({"lecturers": serializer.data}, status=status.HTTP_200_OK)
 
 
+@api_view(["GET", "PUT"])
+def program_settings(request):
+    """
+    GET/PUT /api/program/settings
+    Get or update program settings (university, department info)
+    """
+    # Get the first department head user for program info
+    head = User.objects.filter(role="head").first()
+    
+    if not head:
+        return Response(
+            {"detail": "No department head found"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    if request.method == "GET":
+        return Response({
+            "university": head.university or "",
+            "department": head.department or "",
+        }, status=status.HTTP_200_OK)
+    
+    elif request.method == "PUT":
+        university = request.data.get("university", "")
+        department = request.data.get("department", "")
+        
+        # Update the head's info
+        head.university = university
+        head.department = department
+        head.save()
+        
+        # Optionally update all lecturers in the same program
+        User.objects.filter(role="lecturer").update(
+            university=university,
+            department=department
+        )
+        
+        return Response({
+            "university": university,
+            "department": department,
+        }, status=status.HTTP_200_OK)
+
+
 @api_view(["GET"])
 def list_courses(request):
     """

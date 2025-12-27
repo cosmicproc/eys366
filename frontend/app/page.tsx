@@ -17,6 +17,7 @@ import {
   IconGraph,
   IconTarget,
   IconUsers,
+  IconSettings, // Add this import
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -118,6 +119,13 @@ export default function Home() {
       icon: <IconGraph size={24} />,
       color: "blue",
       onClick: () => router.push("/graph"),
+    },
+    {
+      title: "User Settings",
+      description: "Update your profile and account settings",
+      icon: <IconSettings size={24} />,
+      color: "gray",
+      onClick: () => router.push("/user"),
     },
   ];
 

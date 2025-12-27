@@ -22,7 +22,9 @@ import {
   deleteProgramOutcome,
   getProgramInfo,
   getProgramOutcomes,
+  getProgramSettings,
   updateLecturer,
+  updateProgramSettings,
 } from "../lib/apiClient";
 
 interface Lecturer {
@@ -98,6 +100,13 @@ export default function ProgramPage() {
     null
   );
 
+  // Program settings state
+  const [programSettingsModalOpen, setProgramSettingsModalOpen] = useState(false);
+  const [programUniversity, setProgramUniversity] = useState("");
+  const [programDepartment, setProgramDepartment] = useState("");
+  const [savingProgramSettings, setSavingProgramSettings] = useState(false);
+  const [programSettingsError, setProgramSettingsError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!loading) {
       if (!user || user.role !== "head") {
@@ -110,9 +119,10 @@ export default function ProgramPage() {
 
   const loadData = async () => {
     try {
-      const [lecturesData, outcomesData] = await Promise.all([
+      const [lecturesData, outcomesData, programSettings] = await Promise.all([
         getProgramInfo(),
         getProgramOutcomes(),
+        getProgramSettings(),
       ]);
       // Transform lecturers to match Lecturer interface
       const transformedLecturers = lecturesData.lecturers.map((l: any) => ({
@@ -125,6 +135,8 @@ export default function ProgramPage() {
       }));
       setLecturers(transformedLecturers);
       setOutcomes(outcomesData);
+      setProgramUniversity(programSettings.university);
+      setProgramDepartment(programSettings.department);
 
       // Load courses from API
       const coursesRes = await fetch(
@@ -451,6 +463,29 @@ export default function ProgramPage() {
     }
   };
 
+  const handleUpdateProgramSettings = async () => {
+    if (!programUniversity.trim() || !programDepartment.trim()) {
+      setProgramSettingsError("University and department are required");
+      return;
+    }
+
+    setSavingProgramSettings(true);
+    setProgramSettingsError(null);
+
+    try {
+      await updateProgramSettings(programUniversity, programDepartment);
+      setProgramSettingsModalOpen(false);
+      // Optionally reload data
+      await loadData();
+    } catch (error) {
+      setProgramSettingsError(
+        error instanceof Error ? error.message : "Failed to update program settings"
+      );
+    } finally {
+      setSavingProgramSettings(false);
+    }
+  };
+
   if (loading || pageLoading) {
     return (
       <Container className="py-10 text-center">
@@ -464,6 +499,13 @@ export default function ProgramPage() {
       <Paper shadow="xs" p="md" withBorder>
         <Group justify="space-between" mb="lg">
           <Title order={2}>Program Management</Title>
+          <Button
+            variant="light"
+            color="grape"
+            onClick={() => setProgramSettingsModalOpen(true)}
+          >
+            Program Settings
+          </Button>
         </Group>
 
         <Title order={4} mb="md">
@@ -844,6 +886,48 @@ export default function ProgramPage() {
           </Button>
           <Button onClick={handleAssignLecturer} loading={assigningLecturer}>
             Assign
+          </Button>
+        </Group>
+      </Modal>
+
+      {/* Program Settings Modal */}
+      <Modal
+        opened={programSettingsModalOpen}
+        onClose={() => setProgramSettingsModalOpen(false)}
+        title="Program Settings"
+      >
+        {programSettingsError && (
+          <Text c="red" size="sm" mb="md">
+            {programSettingsError}
+          </Text>
+        )}
+        <TextInput
+          label="University"
+          value={programUniversity}
+          onChange={(e) => setProgramUniversity(e.currentTarget.value)}
+          mb="md"
+          placeholder="Enter university name"
+        />
+        <TextInput
+          label="Department"
+          value={programDepartment}
+          onChange={(e) => setProgramDepartment(e.currentTarget.value)}
+          mb="md"
+          placeholder="Enter department name"
+        />
+        <Group justify="flex-end">
+          <Button
+            variant="default"
+            onClick={() => setProgramSettingsModalOpen(false)}
+            disabled={savingProgramSettings}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleUpdateProgramSettings}
+            loading={savingProgramSettings}
+          >
+            Save Settings
           </Button>
         </Group>
       </Modal>

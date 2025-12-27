@@ -339,3 +339,42 @@ export async function getCourses(): Promise<Course[]> {
     );
     return handleResponse<Course[]>(response);
 }
+
+export const getProgramSettings = async () => {
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const response = await fetch(
+    `${API_URL}/api/program/settings`,
+    {
+      credentials: "include",
+      headers: { ...getAuthHeaders() },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to get program settings");
+  }
+
+  return response.json();
+};
+
+export const updateProgramSettings = async (university: string, department: string) => {
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const response = await fetch(
+    `${API_URL}/api/program/settings`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+      credentials: "include",
+      body: JSON.stringify({ university, department }),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to update program settings");
+  }
+
+  return response.json();
+};
