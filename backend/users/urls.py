@@ -19,5 +19,5 @@ urlpatterns = [
     path("users/create_lecturer/", CreateLecturer.as_view(), name="create-lecturer"),
     path("users/<uuid:pk>/", get_user, name="get-user"),
     path("users/<uuid:pk>/update/", update_user, name="update-user"),
-    path("users/<uuid:pk>/delete/", delete_user, name="delete-user"),
+    path("users/delete_user/<uuid:pk>", delete_user, name="delete-user"),
 ]

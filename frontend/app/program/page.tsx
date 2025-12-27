@@ -41,6 +41,7 @@ interface Course {
 interface ProgramOutcome {
   id: number;
   name: string;
+  description?: string; // Add this
 }
 
 export default function ProgramPage() {
@@ -90,6 +91,7 @@ export default function ProgramPage() {
   const [outcomeModalOpen, setOutcomeModalOpen] = useState(false);
   const [editingOutcomeId, setEditingOutcomeId] = useState<number | null>(null);
   const [outcomeName, setOutcomeName] = useState("");
+  const [outcomeDescription, setOutcomeDescription] = useState("");
   const [creatingOutcome, setCreatingOutcome] = useState(false);
   const [outcomeError, setOutcomeError] = useState<string | null>(null);
   const [deletingOutcomeId, setDeletingOutcomeId] = useState<number | null>(
@@ -314,6 +316,7 @@ export default function ProgramPage() {
   const openEditOutcome = (outcome: ProgramOutcome) => {
     setEditingOutcomeId(outcome.id);
     setOutcomeName(outcome.name);
+    setOutcomeDescription(outcome.description || ""); // Show existing description
     setOutcomeModalOpen(true);
   };
 
@@ -332,20 +335,23 @@ export default function ProgramPage() {
         const response = await fetch(
           `${
             process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-          }/api/outcomes/program-outcomes/${editingOutcomeId}`,
+          }/api/outcomes/program-outcomes/${editingOutcomeId}/`,
           {
             method: "PUT",
             headers: {
               "Content-Type": "application/json",
             },
+            credentials: "include",
             body: JSON.stringify({
               name: outcomeName,
+              description: outcomeDescription || "",
             }),
           }
         );
 
         if (!response.ok) {
-          throw new Error("Failed to update outcome");
+          const errorData = await response.json();
+          throw new Error(errorData.detail || "Failed to update outcome");
         }
       } else {
         // Create new outcome
@@ -353,9 +359,10 @@ export default function ProgramPage() {
       }
 
       setOutcomeName("");
+      setOutcomeDescription(""); // Reset description
       setEditingOutcomeId(null);
       setOutcomeModalOpen(false);
-      await loadData();
+      await loadData(); // This reloads the data with correct IDs
     } catch (error) {
       setOutcomeError(
         error instanceof Error ? error.message : "Failed to save outcome"
@@ -370,7 +377,7 @@ export default function ProgramPage() {
 
     setDeletingOutcomeId(outcomeId);
     try {
-      await deleteProgramOutcome(outcomeId);
+      await deleteProgramOutcome(outcomeId); // For deleting program outcome
       await loadData();
     } catch (error) {
       alert(
@@ -579,6 +586,7 @@ export default function ProgramPage() {
             onClick={() => {
               setEditingOutcomeId(null);
               setOutcomeName("");
+              setOutcomeDescription(""); // Add this - reset description
               setOutcomeModalOpen(true);
             }}
             variant="light"
@@ -716,6 +724,13 @@ export default function ProgramPage() {
           mb="md"
           placeholder="Enter outcome name"
           autoFocus
+        />
+        <TextInput
+          label="Description"
+          value={outcomeDescription}
+          onChange={(e) => setOutcomeDescription(e.currentTarget.value)}
+          mb="md"
+          placeholder="Enter description"
         />
         <Group justify="flex-end">
           <Button

@@ -236,35 +236,42 @@ export async function updateLecturer(id: number, name: string): Promise<void> {
 export async function getProgramOutcomes(): Promise<
     { id: number; name: string }[]
 > {
-    const response = await fetch(`${getApiBase()}/get_program_outcomes`, {
-        method: "GET",
-        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-    });
-    const data = await handleResponse<{
-        program_outcomes: { id: number; name: string }[];
-    }>(response);
-    return data.program_outcomes;
+    const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/outcomes/program-outcomes/`,
+        {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+        }
+    );
+    return handleResponse<{ id: number; name: string }[]>(response);
 }
 
 export async function createProgramOutcome(
     name: string
 ): Promise<{ id: number }> {
-    const response = await fetch(`${getApiBase()}/create_program_outcome`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-        body: JSON.stringify({ name }),
-    });
+    const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/outcomes/program-outcomes/`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ name, description: "" }),
+        }
+    );
     return handleResponse<{ id: number }>(response);
 }
 
 export async function deleteProgramOutcome(
     outcomeId: number
 ): Promise<{ message: string }> {
-    const response = await fetch(`${getApiBase()}/delete_program_outcome`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-        body: JSON.stringify({ outcome_id: outcomeId }),
-    });
+    const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/outcomes/program-outcomes/${outcomeId}/`,
+        {
+            method: "DELETE",
+            credentials: "include",
+        }
+    );
     return handleResponse<{ message: string }>(response);
 }
 

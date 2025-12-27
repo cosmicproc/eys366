@@ -49,6 +49,14 @@ const convertToNodes = (data: GetNodesResponse): Node[] => {
       type: "graphnode",
       position: { x: 50, y: yOffset + index * 120 },
       data: { label: node.name, apiId: node.id },
+      sourcePosition: "right" as const,
+      style: {
+        background: "#e3f2fd",
+        border: "2px solid #1976d2",
+        borderRadius: "8px",
+        padding: "10px",
+        minWidth: "150px",
+      },
     });
   });
 
@@ -60,6 +68,15 @@ const convertToNodes = (data: GetNodesResponse): Node[] => {
       type: "graphnode",
       position: { x: 500, y: yOffset + index * 120 },
       data: { label: node.name, apiId: node.id },
+      sourcePosition: "right" as const,
+      targetPosition: "left" as const,
+      style: {
+        background: "#f3e5f5",
+        border: "2px solid #7b1fa2",
+        borderRadius: "8px",
+        padding: "10px",
+        minWidth: "150px",
+      },
     });
   });
 
@@ -71,6 +88,14 @@ const convertToNodes = (data: GetNodesResponse): Node[] => {
       type: "graphnode",
       position: { x: 950, y: yOffset + index * 120 },
       data: { label: node.name, apiId: node.id },
+      targetPosition: "left" as const,
+      style: {
+        background: "#fff3e0",
+        border: "2px solid #f57c00",
+        borderRadius: "8px",
+        padding: "10px",
+        minWidth: "150px",
+      },
     });
   });
 

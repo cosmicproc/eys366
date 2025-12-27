@@ -108,23 +108,15 @@ class AssignLecturerToCourse(APIView):
 
 
 @api_view(["DELETE"])
-def delete_program(request):
+def delete_program(request, pk):
     """
-    DELETE /api/program/delete_program
-    Body: {"program_id": "<uuid>"}
+    DELETE /api/program/delete_program/<uuid:pk>
     """
-    program_id = request.data.get("program_id")
-    if not program_id:
-        return Response(
-            {"detail": "program_id is required."},
-            status=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        )
-
     try:
-        program = Program.objects.get(pk=program_id)
+        program = Program.objects.get(pk=pk)
     except Program.DoesNotExist:
         return Response(
-            {"detail": f"Program {program_id} not found."},
+            {"detail": f"Program {pk} not found."},
             status=status.HTTP_404_NOT_FOUND,
         )
 
@@ -136,31 +128,22 @@ def delete_program(request):
 
 
 @api_view(["PUT"])
-def update_program(request):
+def update_program(request, pk):
     """
-    PUT /api/program/update_program
+    PUT /api/program/update_program/<uuid:pk>
     Body:
     {
-      "program_id": "<uuid>",
       "name": "...",
       "university": "...",
       "department": "...",
       "lecturer": <user_id>
     }
     """
-    program_id = request.data.get("program_id")
-
-    if not program_id:
-        return Response(
-            {"detail": "program_id is required."},
-            status=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        )
-
     try:
-        program = Program.objects.get(pk=program_id)
+        program = Program.objects.get(pk=pk)
     except Program.DoesNotExist:
         return Response(
-            {"detail": f"Program {program_id} not found."},
+            {"detail": f"Program {pk} not found."},
             status=status.HTTP_404_NOT_FOUND,
         )
 
