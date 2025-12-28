@@ -1,4 +1,5 @@
 from django.contrib.auth import authenticate
+from django.db import transaction
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
@@ -76,6 +77,7 @@ class CreateLecturer(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
 
+    @transaction.atomic
     def post(self, request):
         username = request.data.get("username", "").strip()
         email = request.data.get("email", "").strip()
@@ -105,26 +107,20 @@ class CreateLecturer(APIView):
             )
 
         # Create user with lecturer role
-        try:
-            user = User.objects.create_user(
-                username=username,
-                email=email,
-                first_name=name,
-                last_name="",
-                password=password,
-                role="lecturer",
-                university=university,
-                department=department,
-            )
-            serializer = UserSerializer(user)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        except Exception as e:
-            return Response(
-                {"detail": str(e)},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-
+        
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            first_name=name,
+            last_name="",
+            password=password,
+            role="lecturer",
+            university=university,
+            department=department,
+        )
+        serializer = UserSerializer(user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
 @api_view(["POST"])
 def create_user(request):
     serializer = UserSerializer(data=request.data)
@@ -163,7 +159,7 @@ def get_user(request, pk):
     return Response(serializer.data)
 
 
-@api_view(["DELETE"])
+@api_iview(["DELETE"])
 def delete_user(request, pk):
     try:
         user = User.objects.get(pk=pk)  # Fixed: objects not object
