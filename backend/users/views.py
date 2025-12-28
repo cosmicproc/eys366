@@ -129,7 +129,10 @@ class CreateLecturer(APIView):
 def create_user(request):
     serializer = UserSerializer(data=request.data)
     if serializer.is_valid():
-        serializer.save()
+        user = serializer.save()
+        if 'password' in request.data:
+            user.set_password(request.data['password'])
+            user.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     else:
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -138,11 +141,11 @@ def create_user(request):
 @api_view(["PUT"])
 def update_user(request, pk):
     try:
-        user = User.objects.get(pk=pk)  # Fixed: objects not object
+        user = User.objects.get(pk=pk)
     except User.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
-    serializer = UserSerializer(user, data=request.data)
+    serializer = UserSerializer(user, data=request.data, partial=True)
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
