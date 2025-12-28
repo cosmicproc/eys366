@@ -83,8 +83,8 @@ export async function getNodes(
     courseId?: string | number
 ): Promise<GetNodesResponse> {
     const url = courseId
-        ? `${getApiBase()}/get_nodes?courseId=${courseId}`
-        : `${getApiBase()}/get_nodes`;
+        ? `${getApiBase()}/get_nodes/?courseId=${courseId}`
+        : `${getApiBase()}/get_nodes/`;
     const response = await fetch(url);
     return handleResponse<GetNodesResponse>(response);
 }
@@ -94,7 +94,7 @@ export async function createRelation(
     node2_id: number,
     weight: number
 ): Promise<{ message: string; relation_id: number }> {
-    const response = await fetch(`${getApiBase()}/new_relation`, {
+    const response = await fetch(`${getApiBase()}/new_relation/`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -110,7 +110,7 @@ export async function updateRelation(
   weight: number
 ): Promise<{ message: string }> {
   const response = await fetch(
-    `${getApiBase()}/update_relation`,
+    `${getApiBase()}/update_relation/`,
     {
       method: "POST",
       headers: {
@@ -128,7 +128,7 @@ export async function deleteRelation(
   relationId: number
 ): Promise<{ message: string }> {
   const response = await fetch(
-    `${getApiBase()}/delete_relation`,
+    `${getApiBase()}/delete_relation/`,
     {
       method: "DELETE",
       headers: {
@@ -146,7 +146,7 @@ export async function deleteNode(
   nodeId: number
 ): Promise<{ message: string }> {
   const response = await fetch(
-    `${getApiBase()}/delete_node`,
+    `${getApiBase()}/delete_node/`,
     {
       method: "DELETE",
       headers: {
@@ -165,7 +165,7 @@ export async function updateNode(
   name: string
 ): Promise<{ message: string }> {
   const response = await fetch(
-    `${getApiBase()}/update_node`,
+    `${getApiBase()}/update_node/`,
     {
       method: "POST",
       headers: {
@@ -186,7 +186,7 @@ export async function createNode(
     name: string,
     courseId?: string | number
 ): Promise<{ message: string; id: number }> {
-    const response = await fetch(`${getApiBase()}/new_node`, {
+    const response = await fetch(`${getApiBase()}/new_node/`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({ layer, name, course_id: courseId }),
@@ -236,7 +236,7 @@ export async function getUserInfo(): Promise<User> {
 export const getProgramSettings = async () => {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
   const response = await fetch(
-    `${baseUrl}/api/programs/settings`,
+    `${baseUrl}/api/programs/settings/`,
     {
       credentials: "include",
       headers: {
@@ -257,7 +257,7 @@ export const getProgramSettings = async () => {
 export const updateProgramSettings = async (university: string, department: string) => {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
   const response = await fetch(
-    `${baseUrl}/api/programs/settings`,
+    `${baseUrl}/api/programs/settings/`,
     {
       method: "PUT",
       headers: {
@@ -278,7 +278,7 @@ export const updateProgramSettings = async (university: string, department: stri
 
 export async function getProgramInfo(): Promise<{ lecturers: User[] }> {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-  const response = await fetch(`${baseUrl}/api/programs/program-info`, {
+  const response = await fetch(`${baseUrl}/api/programs/program-info/`, {
     credentials: "include",
   });
   return handleResponse<{ lecturers: User[] }>(response);
@@ -286,7 +286,7 @@ export async function getProgramInfo(): Promise<{ lecturers: User[] }> {
 
 export async function getCourses(): Promise<Course[]> {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-  const response = await fetch(`${baseUrl}/api/programs/list_courses`, {
+  const response = await fetch(`${baseUrl}/api/programs/list_courses/`, {
     credentials: "include",
   });
   return handleResponse<Course[]>(response);
@@ -367,9 +367,10 @@ export async function createLecturer(data: {
 }): Promise<User> {
   const [first_name, ...lastNameParts] = data.name.split(" ");
   const last_name = lastNameParts.join(" ");
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
   const response = await fetch(
-    `${getApiBase().replace('/giraph', '')}/users/create_lecturer/`,
+    `${baseUrl}/api/users/create_lecturer/`,
     {
       method: "POST",
       headers: {
@@ -397,7 +398,8 @@ export async function assignLecturerToCourse(
   courseId: string,
   lecturerId: string
 ): Promise<{ id: string; name: string }> {
-  const response = await fetch(`${getBaseUrl()}/programs/assign_lecturer`, {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  const response = await fetch(`${baseUrl}/api/programs/assign_lecturer/`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

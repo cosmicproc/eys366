@@ -54,11 +54,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const token = localStorage.getItem("auth_token");
       if (token) {
         try {
-          const response = await fetch(`${API_URL}/api/users/me/`, {
-            headers: {
-              Authorization: `Token ${token}`,
-            },
-          });
+          const response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/users/me/`,
+            {
+              credentials: "include",
+              headers: {
+                "Content-Type": "application/json",
+                ...(token ? { Authorization: `Token ${token}` } : {}),
+              },
+            }
+          );
           if (response.ok) {
             const userData = await response.json();
             setUser(normalizeUserData(userData));

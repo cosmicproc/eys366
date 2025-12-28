@@ -23,9 +23,9 @@ function HeaderContent() {
   useEffect(() => {
     if (user && pathname === "/graph") {
       setLoadingCourses(true);
-      const endpoint = "/api/programs/list_courses";
+      const endpoint = "/api/programs/list_courses/"; // Added trailing slash
       const url = `${
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+        process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
       }${endpoint}`;
 
       fetch(url, {

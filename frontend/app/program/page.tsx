@@ -12,6 +12,7 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "../lib/AuthContext";
@@ -43,7 +44,7 @@ interface Course {
 interface ProgramOutcome {
   id: number;
   name: string;
-  description?: string; // Add this
+  description?: string;
 }
 
 export default function ProgramPage() {
@@ -132,7 +133,7 @@ export default function ProgramPage() {
       const [lecturesData, outcomesData, coursesData] = await Promise.all([
         getProgramInfo(),
         getProgramOutcomes(),
-        fetch(`${API_URL}/api/programs/list_courses`, {
+        fetch(`${API_URL}/api/programs/list_courses/`, {
           credentials: "include",
           headers: {
             "Content-Type": "application/json",
@@ -161,7 +162,11 @@ export default function ProgramPage() {
       
     } catch (error) {
       console.error("Failed to load data:", error);
-      alert(`Failed to load data: ${error instanceof Error ? error.message : "Unknown error"}`);
+      notifications.show({
+        title: "Error",
+        message: `Failed to load data: ${error instanceof Error ? error.message : "Unknown error"}`,
+        color: "red",
+      });
     } finally {
       setPageLoading(false);
     }
@@ -179,7 +184,6 @@ export default function ProgramPage() {
       setSavingLecturer(true);
       const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       
-      // Fixed: Use proper API endpoint with credentials
       const response = await fetch(
         `${API_URL}/api/users/${editingLecturerId}/update/`,
         {
@@ -205,8 +209,18 @@ export default function ProgramPage() {
         )
       );
       setEditLecturerModalOpen(false);
+      
+      notifications.show({
+        title: "Success",
+        message: "Lecturer updated successfully",
+        color: "green",
+      });
     } catch (error) {
-      alert(`Failed to update lecturer: ${error instanceof Error ? error.message : "Unknown error"}`);
+      notifications.show({
+        title: "Error",
+        message: `Failed to update lecturer: ${error instanceof Error ? error.message : "Unknown error"}`,
+        color: "red",
+      });
     } finally {
       setSavingLecturer(false);
     }
@@ -218,7 +232,7 @@ export default function ProgramPage() {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const response = await fetch(
-        `${API_URL}/api/users/delete_user/${lecturerId}`,
+        `${API_URL}/api/users/delete_user/${lecturerId}/`,
         {
           method: "DELETE",
           credentials: "include",
@@ -230,12 +244,18 @@ export default function ProgramPage() {
       }
 
       await loadData();
+      
+      notifications.show({
+        title: "Success",
+        message: "Lecturer deleted successfully",
+        color: "green",
+      });
     } catch (error) {
-      alert(
-        `Failed to delete lecturer: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
+      notifications.show({
+        title: "Error",
+        message: `Failed to delete lecturer: ${error instanceof Error ? error.message : "Unknown error"}`,
+        color: "red",
+      });
     }
   };
 
@@ -263,9 +283,8 @@ export default function ProgramPage() {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
       if (editingCourseId) {
-        // Update existing course
         const response = await fetch(
-          `${API_URL}/api/programs/update_program/${editingCourseId}`,
+          `${API_URL}/api/programs/update_program/${editingCourseId}/`,
           {
             method: "PUT",
             headers: {
@@ -287,10 +306,15 @@ export default function ProgramPage() {
         setCourses((prev) =>
           prev.map((c) => (c.id === editingCourseId ? updatedCourse : c))
         );
+        
+        notifications.show({
+          title: "Success",
+          message: "Course updated successfully",
+          color: "green",
+        });
       } else {
-        // Create new course
         const response = await fetch(
-          `${API_URL}/api/programs/create_course`,
+          `${API_URL}/api/programs/create_course/`,
           {
             method: "POST",
             headers: {
@@ -312,6 +336,12 @@ export default function ProgramPage() {
 
         const newCourse = await response.json();
         setCourses((prev) => [...prev, newCourse]);
+        
+        notifications.show({
+          title: "Success",
+          message: "Course created successfully",
+          color: "green",
+        });
       }
 
       setCourseModalOpen(false);
@@ -334,7 +364,7 @@ export default function ProgramPage() {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const response = await fetch(
-        `${API_URL}/api/programs/delete_program/${courseId}`,
+        `${API_URL}/api/programs/delete_program/${courseId}/`,
         {
           method: "DELETE",
           credentials: "include",
@@ -346,12 +376,18 @@ export default function ProgramPage() {
       }
 
       setCourses((prev) => prev.filter((c) => c.id !== courseId));
+      
+      notifications.show({
+        title: "Success",
+        message: "Course deleted successfully",
+        color: "green",
+      });
     } catch (error) {
-      alert(
-        `Failed to delete course: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
+      notifications.show({
+        title: "Error",
+        message: `Failed to delete course: ${error instanceof Error ? error.message : "Unknown error"}`,
+        color: "red",
+      });
     } finally {
       setDeletingCourseId(null);
     }
@@ -360,7 +396,7 @@ export default function ProgramPage() {
   const openEditOutcome = (outcome: ProgramOutcome) => {
     setEditingOutcomeId(outcome.id);
     setOutcomeName(outcome.name);
-    setOutcomeDescription(outcome.description || ""); // Show existing description
+    setOutcomeDescription(outcome.description || "");
     setOutcomeModalOpen(true);
   };
 
@@ -375,7 +411,6 @@ export default function ProgramPage() {
 
     try {
       if (editingOutcomeId) {
-        // Update existing outcome
         const response = await fetch(
           `${
             process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
@@ -397,16 +432,27 @@ export default function ProgramPage() {
           const errorData = await response.json();
           throw new Error(errorData.detail || "Failed to update outcome");
         }
+        
+        notifications.show({
+          title: "Success",
+          message: "Program outcome updated successfully",
+          color: "green",
+        });
       } else {
-        // Create new outcome
         await createProgramOutcome(outcomeName);
+        
+        notifications.show({
+          title: "Success",
+          message: "Program outcome created successfully",
+          color: "green",
+        });
       }
 
       setOutcomeName("");
-      setOutcomeDescription(""); // Reset description
+      setOutcomeDescription("");
       setEditingOutcomeId(null);
       setOutcomeModalOpen(false);
-      await loadData(); // This reloads the data with correct IDs
+      await loadData();
     } catch (error) {
       setOutcomeError(
         error instanceof Error ? error.message : "Failed to save outcome"
@@ -421,14 +467,20 @@ export default function ProgramPage() {
 
     setDeletingOutcomeId(outcomeId);
     try {
-      await deleteProgramOutcome(outcomeId); // For deleting program outcome
+      await deleteProgramOutcome(outcomeId);
       await loadData();
+      
+      notifications.show({
+        title: "Success",
+        message: "Program outcome deleted successfully",
+        color: "green",
+      });
     } catch (error) {
-      alert(
-        `Failed to delete outcome: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
+      notifications.show({
+        title: "Error",
+        message: `Failed to delete outcome: ${error instanceof Error ? error.message : "Unknown error"}`,
+        color: "red",
+      });
     } finally {
       setDeletingOutcomeId(null);
     }
@@ -462,6 +514,12 @@ export default function ProgramPage() {
       setLecturerPassword("123");
       setNewLecturerModalOpen(false);
       await loadData();
+      
+      notifications.show({
+        title: "Success",
+        message: "Lecturer created successfully",
+        color: "green",
+      });
     } catch (error) {
       setLecturerError(
         error instanceof Error ? error.message : "Failed to create lecturer"
@@ -482,14 +540,32 @@ export default function ProgramPage() {
 
     try {
       await assignLecturerToCourse(selectedCourseId, selectedLecturerId);
+      
+      // Get course and lecturer names for the notification
+      const courseName = courses.find(c => c.id === selectedCourseId)?.name || "Course";
+      const lecturerName = lecturers.find(l => l.id === selectedLecturerId)?.name || "Lecturer";
+      
       setSelectedCourseId(null);
       setSelectedLecturerId(null);
       setAssignModalOpen(false);
       await loadData();
+      
+      notifications.show({
+        title: "Lecturer Assigned",
+        message: `${lecturerName} has been assigned to ${courseName}`,
+        color: "green",
+        autoClose: 4000,
+      });
     } catch (error) {
       setAssignError(
         error instanceof Error ? error.message : "Failed to assign lecturer"
       );
+      
+      notifications.show({
+        title: "Assignment Failed",
+        message: error instanceof Error ? error.message : "Failed to assign lecturer to course",
+        color: "red",
+      });
     } finally {
       setAssigningLecturer(false);
     }
@@ -507,12 +583,24 @@ export default function ProgramPage() {
     try {
       await updateProgramSettings(programUniversity, programDepartment);
       setProgramSettingsModalOpen(false);
-      // Optionally reload data
       await loadData();
+      
+      notifications.show({
+        title: "Settings Saved",
+        message: `Program settings updated successfully.\nUniversity: ${programUniversity}\nDepartment: ${programDepartment}`,
+        color: "green",
+        autoClose: 4000,
+      });
     } catch (error) {
       setProgramSettingsError(
         error instanceof Error ? error.message : "Failed to update program settings"
       );
+      
+      notifications.show({
+        title: "Save Failed",
+        message: error instanceof Error ? error.message : "Failed to update program settings",
+        color: "red",
+      });
     } finally {
       setSavingProgramSettings(false);
     }
@@ -660,7 +748,7 @@ export default function ProgramPage() {
             onClick={() => {
               setEditingOutcomeId(null);
               setOutcomeName("");
-              setOutcomeDescription(""); // Add this - reset description
+              setOutcomeDescription("");
               setOutcomeModalOpen(true);
             }}
             variant="light"
