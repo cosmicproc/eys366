@@ -19,7 +19,7 @@ export default function GraphNode(props: {
             {props.targetPosition && (
                 <Handle type="target" position={props.targetPosition} />
             )}
-            <div className="font-medium mb-2">{props.data.label}</div>
+            <div className="font-medium mb-2 text-center">{props.data.label}</div>
             <div className="flex gap-1 justify-center">
                 <ActionIcon
                     variant="subtle"
