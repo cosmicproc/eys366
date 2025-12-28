@@ -105,54 +105,78 @@ export async function createRelation(
     return handleResponse<{ message: string; relation_id: number }>(response);
 }
 
-export async function deleteRelation(
-    relation_id: number
+export async function updateRelation(
+  relationId: number,
+  weight: number
 ): Promise<{ message: string }> {
-    const response = await fetch(`${getApiBase()}/delete_relation`, {
-        method: "DELETE",
-        headers: {
-            "Content-Type": "application/json",
-            ...getAuthHeaders(),
-        },
-        body: JSON.stringify({ relation_id }),
-    });
-    return handleResponse<{ message: string }>(response);
+  const response = await fetch(
+    `${getApiBase()}/update_relation`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+      credentials: "include",
+      body: JSON.stringify({ relation_id: relationId, weight }),
+    }
+  );
+  return handleResponse<{ message: string }>(response);
 }
 
-export async function updateRelation(
-    relation_id: number,
-    weight: number
+export async function deleteRelation(
+  relationId: number
 ): Promise<{ message: string }> {
-    const response = await fetch(`${getApiBase()}/update_relation`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            ...getAuthHeaders(),
-        },
-        body: JSON.stringify({ relation_id, weight }),
-    });
-    return handleResponse<{ message: string }>(response);
+  const response = await fetch(
+    `${getApiBase()}/delete_relation`,
+    {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+      credentials: "include",
+      body: JSON.stringify({ relation_id: relationId }),
+    }
+  );
+  return handleResponse<{ message: string }>(response);
+}
+
+export async function deleteNode(
+  nodeId: number
+): Promise<{ message: string }> {
+  const response = await fetch(
+    `${getApiBase()}/delete_node`,
+    {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+      credentials: "include",
+      body: JSON.stringify({ node_id: nodeId }),
+    }
+  );
+  return handleResponse<{ message: string }>(response);
 }
 
 export async function updateNode(
-    id: number,
-    name: string
+  nodeId: number,
+  name: string
 ): Promise<{ message: string }> {
-    const response = await fetch(`${getApiBase()}/update_node`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-        body: JSON.stringify({ node_id: id, name }),
-    });
-    return handleResponse<{ message: string }>(response);
-}
-
-export async function deleteNode(id: number): Promise<{ message: string }> {
-    const response = await fetch(`${getApiBase()}/delete_node`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-        body: JSON.stringify({ node_id: id }),
-    });
-    return handleResponse<{ message: string }>(response);
+  const response = await fetch(
+    `${getApiBase()}/update_node`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+      credentials: "include",
+      body: JSON.stringify({ node_id: nodeId, name }),
+    }
+  );
+  return handleResponse<{ message: string }>(response);
 }
 
 export type NodeLayer = "course_content" | "course_outcome" | "program_outcome";
