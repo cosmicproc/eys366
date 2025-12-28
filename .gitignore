@@ -409,3 +409,4 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
+venv/
