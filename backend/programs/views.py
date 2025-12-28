@@ -28,7 +28,8 @@ def program_settings(request):
     Get or update program settings (university, department info)
     """
     # Get the first department head user for program info
-    head = User.objects.filter(role="head").first()
+    # Check for both possible role names
+    head = User.objects.filter(role__in=["head", "department_head"]).first()
     
     if not head:
         return Response(

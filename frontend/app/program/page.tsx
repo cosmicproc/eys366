@@ -119,11 +119,30 @@ export default function ProgramPage() {
 
   const loadData = async () => {
     try {
-      const [lecturesData, outcomesData, programSettings] = await Promise.all([
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      
+      // Load program settings separately with fallback
+      let programSettings = { university: "", department: "" };
+      try {
+        programSettings = await getProgramSettings();
+      } catch (error) {
+        console.warn("Program settings not found, using defaults:", error);
+      }
+      
+      const [lecturesData, outcomesData, coursesData] = await Promise.all([
         getProgramInfo(),
         getProgramOutcomes(),
-        getProgramSettings(),
+        fetch(`${API_URL}/api/programs/list_courses`, {
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }).then(res => {
+          if (!res.ok) throw new Error(`Failed to load courses: ${res.status}`);
+          return res.json();
+        }),
       ]);
+
       // Transform lecturers to match Lecturer interface
       const transformedLecturers = lecturesData.lecturers.map((l: any) => ({
         id: l.id,
@@ -133,23 +152,16 @@ export default function ProgramPage() {
             ? `${l.first_name} ${l.last_name}`
             : l.username,
       }));
+      
       setLecturers(transformedLecturers);
       setOutcomes(outcomesData);
       setProgramUniversity(programSettings.university);
       setProgramDepartment(programSettings.department);
-
-      // Load courses from API
-      const coursesRes = await fetch(
-        `${
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-        }/api/programs/list_courses`
-      );
-      if (coursesRes.ok) {
-        const coursesData = await coursesRes.json();
-        setCourses(coursesData);
-      }
+      setCourses(coursesData);
+      
     } catch (error) {
       console.error("Failed to load data:", error);
+      alert(`Failed to load data: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
       setPageLoading(false);
     }
@@ -165,15 +177,36 @@ export default function ProgramPage() {
     if (!editingLecturerId) return;
     try {
       setSavingLecturer(true);
-      await updateLecturer(editingLecturerId, editLecturerName);
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      
+      // Fixed: Use proper API endpoint with credentials
+      const response = await fetch(
+        `${API_URL}/api/users/${editingLecturerId}/update/`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            first_name: editLecturerName.split(" ")[0] || editLecturerName,
+            last_name: editLecturerName.split(" ").slice(1).join(" ") || "",
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to update lecturer");
+      }
+
       setLecturers((prev) =>
         prev.map((l) =>
           l.id === editingLecturerId ? { ...l, name: editLecturerName } : l
         )
       );
       setEditLecturerModalOpen(false);
-    } catch {
-      alert("Failed to update lecturer");
+    } catch (error) {
+      alert(`Failed to update lecturer: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
       setSavingLecturer(false);
     }
@@ -183,12 +216,12 @@ export default function ProgramPage() {
     if (!confirm("Are you sure you want to delete this lecturer?")) return;
 
     try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const response = await fetch(
-        `${
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-        }/api/users/delete_user/${lecturerId}`,
+        `${API_URL}/api/users/delete_user/${lecturerId}`,
         {
           method: "DELETE",
+          credentials: "include",
         }
       );
 
@@ -227,18 +260,18 @@ export default function ProgramPage() {
 
     try {
       setCreatingCourse(true);
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
       if (editingCourseId) {
         // Update existing course
         const response = await fetch(
-          `${
-            process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-          }/api/programs/update_program/${editingCourseId}`,
+          `${API_URL}/api/programs/update_program/${editingCourseId}`,
           {
             method: "PUT",
             headers: {
               "Content-Type": "application/json",
             },
+            credentials: "include",
             body: JSON.stringify({
               name: courseName,
               department: courseDept,
@@ -257,14 +290,13 @@ export default function ProgramPage() {
       } else {
         // Create new course
         const response = await fetch(
-          `${
-            process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-          }/api/programs/create_course`,
+          `${API_URL}/api/programs/create_course`,
           {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
             },
+            credentials: "include",
             body: JSON.stringify({
               name: courseName,
               department: courseDept,
@@ -300,12 +332,12 @@ export default function ProgramPage() {
 
     setDeletingCourseId(courseId);
     try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const response = await fetch(
-        `${
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-        }/api/programs/delete_program/${courseId}`,
+        `${API_URL}/api/programs/delete_program/${courseId}`,
         {
           method: "DELETE",
+          credentials: "include",
         }
       );
 

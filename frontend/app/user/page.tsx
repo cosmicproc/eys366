@@ -10,13 +10,13 @@ import {
   Text,
   Stack,
   Group,
-  Divider,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "../lib/AuthContext";
+import { updateUserProfile, updateUserPassword } from "../lib/apiClient";
 
 export default function UserSettings() {
   const { user, loading } = useAuth();
@@ -34,7 +34,6 @@ export default function UserSettings() {
 
   const passwordForm = useForm({
     initialValues: {
-      currentPassword: "",
       newPassword: "",
       confirmPassword: "",
     },
@@ -63,10 +62,16 @@ export default function UserSettings() {
   }, [user, loading, router]);
 
   const handleUpdateProfile = async (values: typeof form.values) => {
+    if (!user) return;
+
     try {
       setUpdating(true);
-      // TODO: Implement API call to update profile
-      // await updateProfile(values);
+      await updateUserProfile(user.id, {
+        username: values.username,
+        first_name: values.first_name,
+        last_name: values.last_name,
+        email: values.email,
+      });
       notifications.show({
         title: "Success",
         message: "Profile updated successfully",
@@ -75,7 +80,10 @@ export default function UserSettings() {
     } catch (error) {
       notifications.show({
         title: "Error",
-        message: "Failed to update profile",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to update profile",
         color: "red",
       });
     } finally {
@@ -84,20 +92,25 @@ export default function UserSettings() {
   };
 
   const handleUpdatePassword = async (values: typeof passwordForm.values) => {
+    if (!user) return;
+
     try {
       setUpdating(true);
-      // TODO: Implement API call to update password
-      // await updatePassword(values.currentPassword, values.newPassword);
+      await updateUserPassword(user.id, values.newPassword);
       notifications.show({
         title: "Success",
-        message: "Password updated successfully",
+        message:
+          "Password updated successfully. Please login again with your new password.",
         color: "green",
       });
       passwordForm.reset();
     } catch (error) {
       notifications.show({
         title: "Error",
-        message: "Failed to update password",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to update password",
         color: "red",
       });
     } finally {
@@ -144,10 +157,7 @@ export default function UserSettings() {
               {...form.getInputProps("email")}
             />
             <Group justify="flex-end" mt="md">
-              <Button
-                variant="outline"
-                onClick={() => router.push("/")}
-              >
+              <Button variant="outline" onClick={() => router.push("/")}>
                 Cancel
               </Button>
               <Button type="submit" loading={updating}>
@@ -166,11 +176,6 @@ export default function UserSettings() {
         <form onSubmit={passwordForm.onSubmit(handleUpdatePassword)}>
           <Stack gap="md">
             <PasswordInput
-              label="Current Password"
-              placeholder="Enter current password"
-              {...passwordForm.getInputProps("currentPassword")}
-            />
-            <PasswordInput
               label="New Password"
               placeholder="Enter new password"
               {...passwordForm.getInputProps("newPassword")}
@@ -181,10 +186,7 @@ export default function UserSettings() {
               {...passwordForm.getInputProps("confirmPassword")}
             />
             <Group justify="flex-end" mt="md">
-              <Button
-                variant="outline"
-                onClick={() => passwordForm.reset()}
-              >
+              <Button variant="outline" onClick={() => passwordForm.reset()}>
                 Reset
               </Button>
               <Button type="submit" loading={updating}>

@@ -45,11 +45,19 @@ export function setApiBase(base: string) {
 }
 
 export function getApiBase(): string {
-    if (runtimeApiBase) return runtimeApiBase;
-    if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_BASE) {
-        return process.env.NEXT_PUBLIC_API_BASE.replace(/\/$/, "");
-    }
-    return "http://127.0.0.1:8000/api/giraph";
+  if (runtimeApiBase) return runtimeApiBase;
+  if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_BASE) {
+    return process.env.NEXT_PUBLIC_API_BASE.replace(/\/$/, "");
+  }
+  return "http://127.0.0.1:8000/api/giraph";
+}
+
+// Add this helper for non-giraph endpoints
+export function getBaseUrl(): string {
+  if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
+  }
+  return "http://127.0.0.1:8000/api";
 }
 
 export interface NodeRelation {
@@ -201,14 +209,63 @@ export async function getUserInfo(): Promise<User> {
     return handleResponse<User>(response);
 }
 
+export const getProgramSettings = async () => {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  const response = await fetch(
+    `${baseUrl}/api/programs/settings`,
+    {
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }
+  );
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Program settings error:", response.status, errorText);
+    throw new Error(`Failed to get program settings: ${response.status}`);
+  }
+  
+  return response.json();
+};
+
+export const updateProgramSettings = async (university: string, department: string) => {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  const response = await fetch(
+    `${baseUrl}/api/programs/settings`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({ university, department }),
+    }
+  );
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to update program settings: ${errorText}`);
+  }
+  
+  return response.json();
+};
+
 export async function getProgramInfo(): Promise<{ lecturers: User[] }> {
-    const response = await fetch(
-        `${getApiBase().replace("/giraph", "/program")}/program-info`,
-        {
-            headers: { ...getAuthHeaders() },
-        }
-    );
-    return handleResponse<{ lecturers: User[] }>(response);
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  const response = await fetch(`${baseUrl}/api/programs/program-info`, {
+    credentials: "include",
+  });
+  return handleResponse<{ lecturers: User[] }>(response);
+}
+
+export async function getCourses(): Promise<Course[]> {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  const response = await fetch(`${baseUrl}/api/programs/list_courses`, {
+    credentials: "include",
+  });
+  return handleResponse<Course[]>(response);
 }
 
 export interface User {
@@ -232,6 +289,7 @@ export async function updateLecturer(id: number, name: string): Promise<void> {
         }
     );
 }
+
 // Program Outcomes Management
 export async function getProgramOutcomes(): Promise<
     { id: number; name: string }[]
@@ -276,46 +334,103 @@ export async function deleteProgramOutcome(
 }
 
 export async function createLecturer(data: {
-    username: string;
-    email: string;
-    name: string;
-    university: string;
-    department: string;
-    password?: string;
+  username: string;
+  email: string;
+  name: string;
+  university: string;
+  department: string;
+  password?: string;
 }): Promise<User> {
-    const response = await fetch(
-        `${getApiBase().replace("/giraph", "/users/create_lecturer/")}`,
-        {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                ...getAuthHeaders(),
-            },
-            body: JSON.stringify(data),
-        }
-    );
-    return handleResponse<User>(response);
+  const [first_name, ...lastNameParts] = data.name.split(" ");
+  const last_name = lastNameParts.join(" ");
+
+  const response = await fetch(
+    `${getApiBase().replace('/giraph', '')}/users/create_lecturer/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        username: data.username,
+        email: data.email,
+        first_name,
+        last_name,
+        university: data.university,
+        department: data.department,
+        password: data.password || "123",
+        role: "lecturer",
+      }),
+    }
+  );
+
+  return handleResponse<User>(response);
 }
 
 export async function assignLecturerToCourse(
-    courseId: string,
-    lecturerId: string
+  courseId: string,
+  lecturerId: string
 ): Promise<{ id: string; name: string }> {
-    const response = await fetch(
-        `${getApiBase().replace("/giraph", "/programs/assign_lecturer")}`,
-        {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                ...getAuthHeaders(),
-            },
-            body: JSON.stringify({
-                course_id: courseId,
-                lecturer_id: lecturerId,
-            }),
-        }
-    );
-    return handleResponse<{ id: string; name: string }>(response);
+  const response = await fetch(`${getBaseUrl()}/programs/assign_lecturer`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    },
+    credentials: "include",
+    body: JSON.stringify({
+      course_id: courseId,
+      lecturer_id: lecturerId,
+    }),
+  });
+  return handleResponse<{ id: string; name: string }>(response);
+}
+
+export async function updateUserProfile(
+  userId: string,
+  data: {
+    username?: string;
+    first_name?: string;
+    last_name?: string;
+    email?: string;
+  }
+): Promise<User> {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  const token = localStorage.getItem("auth_token");
+  
+  const response = await fetch(`${baseUrl}/api/users/${userId}/update/`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Token ${token}` } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify(data),
+  });
+
+  return handleResponse<User>(response);
+}
+
+export async function updateUserPassword(
+  userId: string,
+  newPassword: string
+): Promise<User> {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  const token = localStorage.getItem("auth_token");
+  
+  const response = await fetch(`${baseUrl}/api/users/${userId}/update/`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Token ${token}` } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify({ password: newPassword }),
+  });
+
+  return handleResponse<User>(response);
 }
 
 export interface Course {
@@ -325,56 +440,3 @@ export interface Course {
     university?: string;
     department?: string;
 }
-
-export async function getCourses(): Promise<Course[]> {
-    const response = await fetch(
-        `${getApiBase().replace("/giraph", "/programs/list_courses")}`,
-        {
-            method: "GET",
-            headers: {
-                "Content-Type": "application/json",
-                ...getAuthHeaders(),
-            },
-        }
-    );
-    return handleResponse<Course[]>(response);
-}
-
-export const getProgramSettings = async () => {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-  const response = await fetch(
-    `${API_URL}/api/program/settings`,
-    {
-      credentials: "include",
-      headers: { ...getAuthHeaders() },
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error("Failed to get program settings");
-  }
-
-  return response.json();
-};
-
-export const updateProgramSettings = async (university: string, department: string) => {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-  const response = await fetch(
-    `${API_URL}/api/program/settings`,
-    {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        ...getAuthHeaders(),
-      },
-      credentials: "include",
-      body: JSON.stringify({ university, department }),
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error("Failed to update program settings");
-  }
-
-  return response.json();
-};

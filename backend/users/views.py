@@ -65,7 +65,7 @@ class CreateLecturer(APIView):
     Body: {
       "username": str,
       "email": str,
-      "name": str,
+      "name": str (or "first_name" + "last_name"),
       "university": str,
       "department": str,
       "password": str (optional, defaults to "123")
@@ -79,7 +79,16 @@ class CreateLecturer(APIView):
     def post(self, request):
         username = request.data.get("username", "").strip()
         email = request.data.get("email", "").strip()
+
+        # Support both "name" and "first_name"/"last_name" formats
         name = request.data.get("name", "").strip()
+        first_name = request.data.get("first_name", "").strip()
+        last_name = request.data.get("last_name", "").strip()
+
+        # If name is not provided, construct from first_name and last_name
+        if not name and first_name:
+            name = f"{first_name} {last_name}".strip()
+
         university = request.data.get("university", "").strip()
         department = request.data.get("department", "").strip()
         password = request.data.get("password", "123")
@@ -87,7 +96,7 @@ class CreateLecturer(APIView):
         # Validate required fields
         if not username or not email or not name:
             return Response(
-                {"detail": "username, email, and name are required"},
+                {"detail": "username, email, and name (or first_name) are required"},
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
 
@@ -106,11 +115,13 @@ class CreateLecturer(APIView):
 
         # Create user with lecturer role
         try:
+            # Split name into first_name and last_name for storage
+            name_parts = name.split(" ", 1)
             user = User.objects.create_user(
                 username=username,
                 email=email,
-                first_name=name,
-                last_name="",
+                first_name=name_parts[0],
+                last_name=name_parts[1] if len(name_parts) > 1 else "",
                 password=password,
                 role="lecturer",
                 university=university,
@@ -136,16 +147,23 @@ def create_user(request):
 
 
 @api_view(["PUT"])
+@permission_classes([AllowAny])  # Add this decorator
 def update_user(request, pk):
     try:
-        user = User.objects.get(pk=pk)  # Fixed: objects not object
+        user = User.objects.get(pk=pk)
     except User.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {"detail": "User not found"},
+            status=status.HTTP_404_NOT_FOUND
+        )
 
-    serializer = UserSerializer(user, data=request.data)
+    # Add partial=True to allow partial updates (e.g., only password)
+    serializer = UserSerializer(user, data=request.data, partial=True)
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    print(f"Serializer errors: {serializer.errors}")  # Debug - check terminal
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 

@@ -6,5 +6,5 @@ urlpatterns = [
     path('api/giraph/', include('giraph.urls')),
     path('api/', include("users.urls")),
     path('api/outcomes/', include("outcomes.urls")),
-    path('api/', include("programs.urls")),
+    path('api/programs/', include("programs.urls")),  # Changed from 'api/' to 'api/programs/'
 ]

@@ -11,15 +11,11 @@ from .views import (
 )
 
 urlpatterns = [
-    path("programs/delete_program/<uuid:pk>", delete_program, name="delete-program"),
-    path("programs/update_program/<uuid:pk>", update_program, name="update-program"),
-    path("program/program-info", program_info, name="program-info"),
-    path("program/settings", program_settings, name="program-settings"),
-    path("programs/list_courses", list_courses, name="list-courses"),
-    path("programs/create_course", CreateCourse.as_view(), name="create-course"),
-    path(
-        "programs/assign_lecturer",
-        AssignLecturerToCourse.as_view(),
-        name="assign-lecturer",
-    ),
+    path("delete_program/<uuid:pk>", delete_program, name="delete-program"),
+    path("update_program/<uuid:pk>", update_program, name="update-program"),
+    path("program-info", program_info, name="program-info"),
+    path("settings", program_settings, name="program-settings"),
+    path("list_courses", list_courses, name="list-courses"),
+    path("create_course", CreateCourse.as_view(), name="create-course"),
+    path("assign_lecturer", AssignLecturerToCourse.as_view(), name="assign-lecturer"),
 ]
