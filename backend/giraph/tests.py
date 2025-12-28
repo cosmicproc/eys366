@@ -1,12 +1,20 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 from giraph.models import Node, Relation, LayerChoices
+from programs.models import Program
+from users.models import User
 
 
 class NewNodeTests(TestCase):
     def test_new_node(self):
         client = APIClient()
-        payload = {"name": "Test Node", "layer": LayerChoices.COURSE_CONTENT}
+        lecturer = User.objects.create(username="testlecturer")
+        course = Program.objects.create(name="Test Course", lecturer=lecturer)
+        payload = {
+            "name": "Test Node",
+            "layer": LayerChoices.COURSE_CONTENT,
+            "course_id": str(course.id),
+        }
 
         response = client.post("/api/giraph/new_node", payload, format="json")
 
@@ -169,6 +177,52 @@ class DeleteNodeTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertIn("not found", response.json()["detail"])
 
+class ProgramOutcomeTests(TestCase):
+    def test_get_program_outcomes(self):
+        Node.objects.create(name="PO 1", layer=LayerChoices.PROGRAM_OUTCOME)
+        Node.objects.create(name="PO 2", layer=LayerChoices.PROGRAM_OUTCOME)
+
+        client = APIClient()
+        response = client.get("/api/giraph/get_program_outcomes")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data["program_outcomes"]), 2)
+
+    def test_create_program_outcome(self):
+        client = APIClient()
+        payload = {"name": "New PO"}
+
+        response = client.post("/api/giraph/create_program_outcome", payload, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(data["message"], "Program outcome created.")
+
+        node_id = data["id"]
+        node = Node.objects.get(pk=node_id)
+        self.assertEqual(node.name, "New PO")
+        self.assertEqual(node.layer, LayerChoices.PROGRAM_OUTCOME)
+
+    def test_delete_program_outcome(self):
+        po = Node.objects.create(name="PO to Delete", layer=LayerChoices.PROGRAM_OUTCOME)
+
+        client = APIClient()
+        payload = {"outcome_id": po.id}
+
+        response = client.delete("/api/giraph/delete_program_outcome", payload, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["message"], "Program outcome deleted.")
+        self.assertFalse(Node.objects.filter(id=po.id).exists())
+
+
+class PingTest(TestCase):
+    def test_ping(self):
+        client = APIClient()
+        response = client.get("/api/giraph/ping")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"ok": True, "service": "giraph", "message": "endpoint works"})
 
 class DeleteRelationTests(TestCase):
     def test_delete_relation(self):
