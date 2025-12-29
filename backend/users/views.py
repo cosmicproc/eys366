@@ -159,7 +159,7 @@ def get_user(request, pk):
     return Response(serializer.data)
 
 
-@api_iview(["DELETE"])
+@api_view(["DELETE"])
 def delete_user(request, pk):
     try:
         user = User.objects.get(pk=pk)  # Fixed: objects not object
