@@ -1,12 +1,14 @@
-import { Suspense } from "react";
+"use client";
+
+import { ReactFlowProvider } from "@xyflow/react";
 import MainGraph from "../lib/MainGraph";
 
 export default function GraphPage() {
   return (
-    <div className="w-screen h-screen">
-      <Suspense fallback={<div>Loading...</div>}>
+    <ReactFlowProvider>
+      <div className="w-screen h-screen">
         <MainGraph />
-      </Suspense>
-    </div>
+      </div>
+    </ReactFlowProvider>
   );
 }

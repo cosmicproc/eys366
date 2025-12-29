@@ -1,4 +1,5 @@
 import "@mantine/core/styles.css";
+import "@mantine/notifications/styles.css";
 import type { Metadata } from "next";
 import { Outfit } from "next/font/google";
 import "./globals.css";
@@ -8,6 +9,8 @@ import {
     MantineProvider,
     mantineHtmlProps,
 } from "@mantine/core";
+import { Notifications } from "@mantine/notifications";
+
 import RootUILayout from "./lib/layoutUI";
 
 const libreBaskerville = Outfit({
@@ -34,6 +37,7 @@ export default function RootLayout({
                 className={`${libreBaskerville.className} flex min-h-screen flex-col`}
             >
                 <MantineProvider>
+                    <Notifications position="top-right" />
                     <RootUILayout>{children}</RootUILayout>
                 </MantineProvider>
             </body>
