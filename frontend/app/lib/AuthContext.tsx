@@ -80,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (username: string, password: string) => {
-    const response = await fetch(`${API_URL}/api/login/`, {
+    const response = await fetch(`${API_URL}/api/users/login/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -103,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const token = localStorage.getItem("auth_token");
       if (token) {
-        await fetch(`${API_URL}/api/logout/`, {
+        await fetch(`${API_URL}/api/users/logout/`, {
           method: "POST",
           headers: {
             Authorization: `Token ${token}`,

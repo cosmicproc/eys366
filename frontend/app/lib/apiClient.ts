@@ -203,14 +203,15 @@ function getAuthHeaders(): Record<string, string> {
 }
 
 export async function login(
-    username: string
+    username: string,
+    password: string
 ): Promise<{ token: string; user: User }> {
     const response = await fetch(
-        `${getApiBase().replace("/giraph", "/auth")}/login`,
+        `${getBaseUrl()}/users/login/`, // <-- changed from /login/ to /users/login/
         {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username }),
+            body: JSON.stringify({ username, password }),
         }
     );
     return handleResponse<{ token: string; user: User }>(response);
