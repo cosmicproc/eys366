@@ -17,7 +17,7 @@ import {
   IconGraph,
   IconTarget,
   IconUsers,
-  IconSettings, // Add this import
+  IconSettings,
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -66,7 +66,7 @@ export default function Home() {
       setLoadingStats(true);
       // Load stats for first course if lecturer, or all if head
       const courseId =
-        user?.role !== "head" && user.courseIds?.[0]
+        user?.role !== "head" && user?.courseIds?.[0]
           ? user.courseIds[0]
           : undefined;
 
@@ -110,24 +110,18 @@ export default function Home() {
 
   const isHead = user.role === "head";
 
-  const quickActions = [
-    {
-      title: "View Graph",
-      description: isHead
-        ? "Visualize course and program outcomes"
-        : "Visualize your course outcomes",
-      icon: <IconGraph size={24} />,
-      color: "blue",
-      onClick: () => router.push("/graph"),
-    },
-    {
-      title: "User Settings",
-      description: "Update your profile and account settings",
-      icon: <IconSettings size={24} />,
-      color: "gray",
-      onClick: () => router.push("/user"),
-    },
-  ];
+  // Filter courses for lecturers based on their assigned course IDs
+  const userCourses = isHead
+    ? courses
+    : courses.filter((course) => {
+        // Check if course.id matches any of user's courseIds or courses
+        const courseIdStr = String(course.id);
+        const courseIdNum = parseInt(course.id);
+        return (
+          user.courseIds?.includes(courseIdStr) ||
+          user.courses?.includes(courseIdNum)
+        );
+      });
 
   return (
     <Container size="lg" className="py-20 mt-20">
@@ -157,8 +151,8 @@ export default function Home() {
         <Text size="sm" c="dimmed">
           {isHead
             ? "Manage your program, oversee courses, and track outcomes across the department."
-            : `Manage your ${user.courseIds?.length || 0} assigned course${
-                (user.courseIds?.length || 0) !== 1 ? "s" : ""
+            : `Manage your ${userCourses.length || 0} assigned course${
+                userCourses.length !== 1 ? "s" : ""
               }.`}
         </Text>
       </Paper>
@@ -169,7 +163,7 @@ export default function Home() {
       </Title>
       <Grid mb="xl">
         <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
-          <Card shadow="sm" padding="lg" withBorder h="100%" minh={160}>
+          <Card shadow="sm" padding="lg" withBorder h="100%">
             {loadingStats ? (
               <Skeleton height={80} />
             ) : (
@@ -178,11 +172,7 @@ export default function Home() {
                   <Text size="sm" c="dimmed" flex={1}>
                     Course Contents
                   </Text>
-                  <IconBook
-                    size={20}
-                    color="var(--mantine-color-blue-6)"
-                    style={{ flexShrink: 0 }}
-                  />
+                  <IconBook size={20} color="var(--mantine-color-blue-6)" />
                 </Group>
                 <Text size="xl" fw={700}>
                   {stats.courseContents}
@@ -192,7 +182,7 @@ export default function Home() {
           </Card>
         </Grid.Col>
         <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
-          <Card shadow="sm" padding="lg" withBorder h="100%" minh={160}>
+          <Card shadow="sm" padding="lg" withBorder h="100%">
             {loadingStats ? (
               <Skeleton height={80} />
             ) : (
@@ -201,11 +191,7 @@ export default function Home() {
                   <Text size="sm" c="dimmed" flex={1}>
                     Course Outcomes
                   </Text>
-                  <IconTarget
-                    size={20}
-                    color="var(--mantine-color-violet-6)"
-                    style={{ flexShrink: 0 }}
-                  />
+                  <IconTarget size={20} color="var(--mantine-color-violet-6)" />
                 </Group>
                 <Text size="xl" fw={700}>
                   {stats.courseOutcomes}
@@ -215,7 +201,7 @@ export default function Home() {
           </Card>
         </Grid.Col>
         <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
-          <Card shadow="sm" padding="lg" withBorder h="100%" minh={160}>
+          <Card shadow="sm" padding="lg" withBorder h="100%">
             {loadingStats ? (
               <Skeleton height={80} />
             ) : (
@@ -224,11 +210,7 @@ export default function Home() {
                   <Text size="sm" c="dimmed" flex={1}>
                     Program Outcomes
                   </Text>
-                  <IconUsers
-                    size={20}
-                    color="var(--mantine-color-green-6)"
-                    style={{ flexShrink: 0 }}
-                  />
+                  <IconUsers size={20} color="var(--mantine-color-green-6)" />
                 </Group>
                 <Text size="xl" fw={700}>
                   {stats.programOutcomes}
@@ -238,7 +220,7 @@ export default function Home() {
           </Card>
         </Grid.Col>
         <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
-          <Card shadow="sm" padding="lg" withBorder h="100%" minh={160}>
+          <Card shadow="sm" padding="lg" withBorder h="100%">
             {loadingStats ? (
               <Skeleton height={80} />
             ) : (
@@ -247,11 +229,7 @@ export default function Home() {
                   <Text size="sm" c="dimmed" flex={1}>
                     Total Relations
                   </Text>
-                  <IconGraph
-                    size={20}
-                    color="var(--mantine-color-orange-6)"
-                    style={{ flexShrink: 0 }}
-                  />
+                  <IconGraph size={20} color="var(--mantine-color-orange-6)" />
                 </Group>
                 <Text size="xl" fw={700}>
                   {stats.totalRelations}
@@ -266,35 +244,117 @@ export default function Home() {
       <Title order={2} mb="md">
         Quick Actions
       </Title>
-      <Grid>
-        {quickActions.map((action) => (
-          <Grid.Col key={action.title} span={{ base: 12, sm: 6, md: 6 }}>
-            <Card
-              shadow="sm"
-              padding="lg"
-              withBorder
-              className="cursor-pointer hover:shadow-md transition-shadow"
-              onClick={action.onClick}
-            >
-              <Group>
-                <div className={`p-3 rounded-lg bg-${action.color}-50`}>
-                  {action.icon}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <Text fw={500} size="lg">
-                    {action.title}
-                  </Text>
-                  <Text size="sm" c="dimmed">
-                    {action.description}
-                  </Text>
-                </div>
-              </Group>
-            </Card>
-          </Grid.Col>
-        ))}
+      <Grid mb="xl">
+        <Grid.Col span={{ base: 12, sm: 6 }}>
+          <Card
+            shadow="sm"
+            padding="lg"
+            withBorder
+            className="cursor-pointer hover:shadow-md transition-shadow"
+            onClick={() => router.push("/graph")}
+          >
+            <Group>
+              <div className="p-3 rounded-lg bg-blue-50">
+                <IconGraph size={24} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <Text fw={500} size="lg">
+                  View Graph
+                </Text>
+                <Text size="sm" c="dimmed">
+                  {isHead
+                    ? "Visualize course and program outcomes"
+                    : "Visualize your course outcomes"}
+                </Text>
+              </div>
+            </Group>
+          </Card>
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, sm: 6 }}>
+          <Card
+            shadow="sm"
+            padding="lg"
+            withBorder
+            className="cursor-pointer hover:shadow-md transition-shadow"
+            onClick={() => router.push("/user")}
+          >
+            <Group>
+              <div className="p-3 rounded-lg bg-gray-50">
+                <IconSettings size={24} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <Text fw={500} size="lg">
+                  User Settings
+                </Text>
+                <Text size="sm" c="dimmed">
+                  Update your profile and account settings
+                </Text>
+              </div>
+            </Group>
+          </Card>
+        </Grid.Col>
       </Grid>
 
-      {/* Recent Activity / Additional Info */}
+      {/* Your Courses Section */}
+      <Title order={2} mb="md">
+        {isHead ? "All Courses" : "Your Courses"}
+      </Title>
+      <Paper shadow="xs" p="lg" mb="xl" withBorder>
+        {loadingCourses ? (
+          <Grid>
+            {[1, 2, 3].map((i) => (
+              <Grid.Col key={i} span={{ base: 12, sm: 6, md: 4 }}>
+                <Skeleton height={100} radius="md" />
+              </Grid.Col>
+            ))}
+          </Grid>
+        ) : userCourses.length === 0 ? (
+          <Text c="dimmed" ta="center" py="lg">
+            {isHead
+              ? "No courses created yet. Go to Program Management to add courses."
+              : "You have no courses assigned yet. Contact your department head."}
+          </Text>
+        ) : (
+          <Grid>
+            {userCourses.map((course) => (
+              <Grid.Col key={course.id} span={{ base: 12, sm: 6, md: 4 }}>
+                <Card
+                  shadow="sm"
+                  padding="md"
+                  withBorder
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => router.push(`/graph?courseId=${course.id}`)}
+                >
+                  <Group justify="space-between" mb="xs">
+                    <Text fw={500} lineClamp={1}>
+                      {course.name}
+                    </Text>
+                    <IconBook size={18} color="var(--mantine-color-blue-6)" />
+                  </Group>
+                  {course.department && (
+                    <Text size="xs" c="dimmed" mb="sm">
+                      {course.department}
+                    </Text>
+                  )}
+                  <Button
+                    variant="light"
+                    size="xs"
+                    fullWidth
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      router.push(`/graph?courseId=${course.id}`);
+                    }}
+                  >
+                    View Graph
+                  </Button>
+                </Card>
+              </Grid.Col>
+            ))}
+          </Grid>
+        )}
+      </Paper>
+
+      {/* Department Information (Head only) */}
       {isHead && (
         <Paper shadow="xs" p="lg" mt="xl" withBorder>
           <Title order={3} mb="md">
@@ -311,7 +371,7 @@ export default function Home() {
               <Text size="sm" c="dimmed" mb="xs">
                 Total Courses
               </Text>
-              <Text fw={500}>{user.courseIds?.length || 0}</Text>
+              <Text fw={500}>{courses.length}</Text>
             </Grid.Col>
           </Grid>
           <Button
@@ -322,32 +382,6 @@ export default function Home() {
           >
             Manage Program
           </Button>
-        </Paper>
-      )}
-
-      {!isHead && (
-        <Paper shadow="xs" p="lg" mt="xl" withBorder>
-          <Title order={3} mb="md">
-            Your Courses
-          </Title>
-          <Text size="sm" c="dimmed" mb="md">
-            You have access to {user.courseIds?.length || 0} course
-            {(user.courseIds?.length || 0) !== 1 ? "s" : ""}.
-          </Text>
-          <Group>
-            {user.courseIds?.map((courseId) => {
-              const course = courses.find((c) => c.id === courseId);
-              return (
-                <Button
-                  key={courseId}
-                  variant="light"
-                  onClick={() => router.push(`/graph?courseId=${courseId}`)}
-                >
-                  {course?.name || `Course ${courseId}`}
-                </Button>
-              );
-            })}
-          </Group>
         </Paper>
       )}
     </Container>

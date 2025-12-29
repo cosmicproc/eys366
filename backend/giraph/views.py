@@ -5,6 +5,8 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.decorators import api_view, permission_classes, action
+from rest_framework.permissions import IsAuthenticated
 
 from .models import LayerChoices, Node, Relation
 from .serializers import (
@@ -87,6 +89,7 @@ class NewRelation(APIView):
 class GetNodes(APIView):
     """GET /api/giraph/get_nodes/?courseId=<id>
     Returns all nodes and relations in the graph, filtered by course if provided.
+    Program outcomes are always included regardless of course filter.
     """
 
     authentication_classes = []
@@ -95,22 +98,22 @@ class GetNodes(APIView):
     def get(self, request):
         course_id = request.query_params.get("courseId")
 
-        # Filter nodes by course if provided
+        # Program outcomes are ALWAYS included (they have course=None)
+        program_outcome_nodes = list(
+            Node.objects.filter(layer=LayerChoices.PROGRAM_OUTCOME).only(
+                "id", "name", "layer", "course_id"
+            )
+        )
+
+        # Filter course-specific nodes by course if provided
         if course_id:
             try:
                 # Verify course exists
                 course = Program.objects.get(pk=course_id)
-                nodes = list(
-                    Node.objects.filter(course=course).only(
-                        "id", "name", "layer", "course_id"
-                    )
-                )
-                # Only get relations between nodes in this course
-                node_ids = [n.id for n in nodes]
-                rels = list(
-                    Relation.objects.filter(
-                        node1_id__in=node_ids, node2_id__in=node_ids
-                    ).only("id", "node1_id", "node2_id", "weight")
+                course_specific_nodes = list(
+                    Node.objects.filter(course=course).exclude(
+                        layer=LayerChoices.PROGRAM_OUTCOME
+                    ).only("id", "name", "layer", "course_id")
                 )
             except Program.DoesNotExist:
                 return Response(
@@ -118,10 +121,22 @@ class GetNodes(APIView):
                     status=status.HTTP_404_NOT_FOUND,
                 )
         else:
-            nodes = list(Node.objects.all().only("id", "name", "layer", "course_id"))
-            rels = list(
-                Relation.objects.all().only("id", "node1_id", "node2_id", "weight")
+            course_specific_nodes = list(
+                Node.objects.exclude(layer=LayerChoices.PROGRAM_OUTCOME).only(
+                    "id", "name", "layer", "course_id"
+                )
             )
+
+        # Combine all nodes
+        nodes = course_specific_nodes + program_outcome_nodes
+        node_ids = [n.id for n in nodes]
+
+        # Get relations between these nodes
+        rels = list(
+            Relation.objects.filter(
+                node1_id__in=node_ids, node2_id__in=node_ids
+            ).only("id", "node1_id", "node2_id", "weight")
+        )
 
         rel_map = {n.id: [] for n in nodes}
         for r in rels:
@@ -352,3 +367,30 @@ class DeleteProgramOutcome(APIView):
             {"message": "Program outcome deleted."},
             status=status.HTTP_200_OK,
         )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_nodes(request):
+    course_id = request.query_params.get('course_id')
+    
+    # Get program outcomes - these are always returned regardless of course_id
+    program_outcomes = Node.objects.filter(layer='program_outcome')
+    
+    if course_id:
+        # Filter course contents and course outcomes by course_id
+        course_contents = Node.objects.filter(layer='course_content', course_id=course_id)
+        course_outcomes = Node.objects.filter(layer='course_outcome', course_id=course_id)
+    else:
+        # Return all nodes
+        course_contents = Node.objects.filter(layer='course_content')
+        course_outcomes = Node.objects.filter(layer='course_outcome')
+    
+    # Build response with all program outcomes always included
+    response_data = {
+        'course_contents': serialize_nodes(course_contents),
+        'course_outcomes': serialize_nodes(course_outcomes),
+        'program_outcomes': serialize_nodes(program_outcomes),  # Always included
+    }
+    
+    return Response(response_data)

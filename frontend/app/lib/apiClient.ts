@@ -86,8 +86,8 @@ export interface GetNodesResponse {
 
 function getAuthHeaders(): Record<string, string> {
     if (typeof localStorage === "undefined") return {};
-    const token = localStorage.getItem("auth_token"); // Changed from giraph_token
-    return token ? { Authorization: `Token ${token}` } : {}; // Changed from Bearer
+    const token = localStorage.getItem("auth_token");
+    return token ? { Authorization: `Token ${token}` } : {};
 }
 
 export async function getNodes(
@@ -361,11 +361,45 @@ export async function updateLecturer(id: number, name: string): Promise<void> {
 }
 
 // Program Outcomes Management
+export async function createProgramOutcome(
+    name: string
+): Promise<{ id: number }> {
+    // Create the program outcome as a graph node (this is the main storage)
+    const response = await fetch(`${getApiBase()}/create_program_outcome/`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+        },
+        credentials: "include",
+        body: JSON.stringify({ name }),
+    });
+    
+    return handleResponse<{ id: number }>(response);
+}
+
+export async function deleteProgramOutcome(
+    outcomeId: number
+): Promise<{ message: string }> {
+    // Delete the program outcome node directly
+    const response = await fetch(`${getApiBase()}/delete_program_outcome/`, {
+        method: "DELETE",
+        headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+        },
+        credentials: "include",
+        body: JSON.stringify({ outcome_id: outcomeId }),
+    });
+    
+    return handleResponse<{ message: string }>(response);
+}
+
 export async function getProgramOutcomes(): Promise<
     { id: number; name: string }[]
 > {
     const response = await fetch(
-        `${getBaseUrl()}/api/outcomes/program-outcomes/`,
+        `${getApiBase()}/get_program_outcomes/`,
         {
             method: "GET",
             headers: { 
@@ -375,123 +409,8 @@ export async function getProgramOutcomes(): Promise<
             credentials: "include",
         }
     );
-    return handleResponse<{ id: number; name: string }[]>(response);
-}
-
-// Program Outcomes Management - Updated to also create graph node
-export async function createProgramOutcome(
-    name: string
-): Promise<{ id: number }> {
-    // First, create the program outcome in the outcomes table
-    const response = await fetch(
-        `${getBaseUrl()}/api/outcomes/program-outcomes/`,
-        {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                ...getAuthHeaders(),
-            },
-            credentials: "include",
-            body: JSON.stringify({ name }),
-        }
-    );
-    const result = await handleResponse<{ id: number }>(response);
-    
-    // Also create the corresponding graph node for program_outcome layer
-    try {
-        await fetch(`${getApiBase()}/create_node/`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                ...getAuthHeaders(),
-            },
-            credentials: "include",
-            body: JSON.stringify({
-                layer: "program_outcome",
-                name: name,
-            }),
-        });
-    } catch (error) {
-        console.warn("Failed to create graph node for program outcome:", error);
-        // Don't fail the whole operation if graph node creation fails
-    }
-    
-    return result;
-}
-
-export async function deleteProgramOutcome(
-    outcomeId: number
-): Promise<{ message: string }> {
-    // First, get the outcome name to find the corresponding graph node
-    let outcomeName: string | null = null;
-    try {
-        const outcomesResponse = await fetch(
-            `${getBaseUrl()}/api/outcomes/program-outcomes/`,
-            {
-                headers: {
-                    "Content-Type": "application/json",
-                    ...getAuthHeaders(),
-                },
-                credentials: "include",
-            }
-        );
-        if (outcomesResponse.ok) {
-            const outcomes = await outcomesResponse.json();
-            const outcome = outcomes.find((o: { id: number; name: string }) => o.id === outcomeId);
-            outcomeName = outcome?.name || null;
-        }
-    } catch (error) {
-        console.warn("Failed to get outcome name:", error);
-    }
-
-    // Delete the program outcome from the outcomes table
-    const response = await fetch(
-        `${getBaseUrl()}/api/outcomes/program-outcomes/${outcomeId}/`,
-        {
-            method: "DELETE",
-            headers: {
-                "Content-Type": "application/json",
-                ...getAuthHeaders(),
-            },
-            credentials: "include",
-        }
-    );
-    const result = await handleResponse<{ message: string }>(response);
-
-    // Also delete the corresponding graph node if we found the name
-    if (outcomeName) {
-        try {
-            // Get nodes to find the matching program outcome node
-            const nodesResponse = await fetch(`${getApiBase()}/get_nodes/`, {
-                headers: {
-                    "Content-Type": "application/json",
-                    ...getAuthHeaders(),
-                },
-                credentials: "include",
-            });
-            if (nodesResponse.ok) {
-                const nodesData = await nodesResponse.json();
-                const programOutcomeNode = nodesData.program_outcomes?.find(
-                    (n: { id: number; name: string }) => n.name === outcomeName
-                );
-                if (programOutcomeNode) {
-                    await fetch(`${getApiBase()}/delete_node/`, {
-                        method: "DELETE",
-                        headers: {
-                            "Content-Type": "application/json",
-                            ...getAuthHeaders(),
-                        },
-                        credentials: "include",
-                        body: JSON.stringify({ node_id: programOutcomeNode.id }),
-                    });
-                }
-            }
-        } catch (error) {
-            console.warn("Failed to delete graph node for program outcome:", error);
-        }
-    }
-
-    return result;
+    const data = await handleResponse<{ program_outcomes: { id: number; name: string }[] }>(response);
+    return data.program_outcomes;
 }
 
 export async function createLecturer(data: {
