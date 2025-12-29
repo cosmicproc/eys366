@@ -18,13 +18,16 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../lib/AuthContext";
 import {
   assignLecturerToCourse,
+  createCourse,
   createLecturer,
   createProgramOutcome,
+  deleteCourse,
   deleteProgramOutcome,
+  getCourses,
   getProgramInfo,
   getProgramOutcomes,
   getProgramSettings,
-  updateLecturer,
+  updateCourse,
   updateProgramSettings,
 } from "../lib/apiClient";
 
@@ -118,10 +121,16 @@ export default function ProgramPage() {
     }
   }, [user, loading, router]);
 
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("auth_token");
+    return {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Token ${token}` } : {}),
+    };
+  };
+
   const loadData = async () => {
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      
       // Load program settings separately with fallback
       let programSettings = { university: "", department: "" };
       try {
@@ -133,15 +142,7 @@ export default function ProgramPage() {
       const [lecturesData, outcomesData, coursesData] = await Promise.all([
         getProgramInfo(),
         getProgramOutcomes(),
-        fetch(`${API_URL}/api/programs/list_courses/`, {
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }).then(res => {
-          if (!res.ok) throw new Error(`Failed to load courses: ${res.status}`);
-          return res.json();
-        }),
+        getCourses(),
       ]);
 
       // Transform lecturers to match Lecturer interface
@@ -188,9 +189,7 @@ export default function ProgramPage() {
         `${API_URL}/api/users/${editingLecturerId}/update/`,
         {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: getAuthHeaders(),
           credentials: "include",
           body: JSON.stringify({
             first_name: editLecturerName.split(" ")[0] || editLecturerName,
@@ -235,6 +234,7 @@ export default function ProgramPage() {
         `${API_URL}/api/users/delete_user/${lecturerId}/`,
         {
           method: "DELETE",
+          headers: getAuthHeaders(),
           credentials: "include",
         }
       );
@@ -280,29 +280,13 @@ export default function ProgramPage() {
 
     try {
       setCreatingCourse(true);
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
       if (editingCourseId) {
-        const response = await fetch(
-          `${API_URL}/api/programs/update_program/${editingCourseId}/`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            credentials: "include",
-            body: JSON.stringify({
-              name: courseName,
-              department: courseDept,
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to update course");
-        }
-
-        const updatedCourse = await response.json();
+        const updatedCourse = await updateCourse(editingCourseId, {
+          name: courseName,
+          department: courseDept,
+        });
+        
         setCourses((prev) =>
           prev.map((c) => (c.id === editingCourseId ? updatedCourse : c))
         );
@@ -313,28 +297,13 @@ export default function ProgramPage() {
           color: "green",
         });
       } else {
-        const response = await fetch(
-          `${API_URL}/api/programs/create_course/`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            credentials: "include",
-            body: JSON.stringify({
-              name: courseName,
-              department: courseDept,
-              lecturer_id: user?.id,
-              university: user?.university || "Not specified",
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to create course");
-        }
-
-        const newCourse = await response.json();
+        const newCourse = await createCourse({
+          name: courseName,
+          lecturer_id: user?.id,
+          university: user?.university || "Not specified",
+          department: courseDept,
+        });
+        
         setCourses((prev) => [...prev, newCourse]);
         
         notifications.show({
@@ -362,19 +331,7 @@ export default function ProgramPage() {
 
     setDeletingCourseId(courseId);
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const response = await fetch(
-        `${API_URL}/api/programs/delete_program/${courseId}/`,
-        {
-          method: "DELETE",
-          credentials: "include",
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to delete course");
-      }
-
+      await deleteCourse(courseId);
       setCourses((prev) => prev.filter((c) => c.id !== courseId));
       
       notifications.show({
@@ -411,15 +368,12 @@ export default function ProgramPage() {
 
     try {
       if (editingOutcomeId) {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
         const response = await fetch(
-          `${
-            process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-          }/api/outcomes/program-outcomes/${editingOutcomeId}/`,
+          `${API_URL}/api/outcomes/program-outcomes/${editingOutcomeId}/`,
           {
             method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers: getAuthHeaders(),
             credentials: "include",
             body: JSON.stringify({
               name: outcomeName,
@@ -439,6 +393,7 @@ export default function ProgramPage() {
           color: "green",
         });
       } else {
+        // This creates the program outcome via the API which also creates the graph node
         await createProgramOutcome(outcomeName);
         
         notifications.show({
@@ -541,9 +496,8 @@ export default function ProgramPage() {
     try {
       await assignLecturerToCourse(selectedCourseId, selectedLecturerId);
       
-      // Get course and lecturer names for the notification
-      const courseName = courses.find(c => c.id === selectedCourseId)?.name || "Course";
-      const lecturerName = lecturers.find(l => l.id === selectedLecturerId)?.name || "Lecturer";
+      const courseNameFound = courses.find(c => c.id === selectedCourseId)?.name || "Course";
+      const lecturerNameFound = lecturers.find(l => l.id === selectedLecturerId)?.name || "Lecturer";
       
       setSelectedCourseId(null);
       setSelectedLecturerId(null);
@@ -552,7 +506,7 @@ export default function ProgramPage() {
       
       notifications.show({
         title: "Lecturer Assigned",
-        message: `${lecturerName} has been assigned to ${courseName}`,
+        message: `${lecturerNameFound} has been assigned to ${courseNameFound}`,
         color: "green",
         autoClose: 4000,
       });

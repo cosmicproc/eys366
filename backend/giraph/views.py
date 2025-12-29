@@ -85,30 +85,38 @@ class NewRelation(APIView):
 
 
 class GetNodes(APIView):
-    """GET /api/giraph/get_nodes?course_id=<id>
-    Returns all nodes and relations in the graph, optionally filtered by course.
+    """GET /api/giraph/get_nodes/?courseId=<id>
+    Returns all nodes and relations in the graph, filtered by course if provided.
     """
 
     authentication_classes = []
     permission_classes = [AllowAny]
 
     def get(self, request):
-        course_id = request.query_params.get("course_id")
+        course_id = request.query_params.get("courseId")
 
         # Filter nodes by course if provided
         if course_id:
-            nodes = list(
-                Node.objects.filter(course_id=course_id).only(
-                    "id", "name", "layer", "course_id"
+            try:
+                # Verify course exists
+                course = Program.objects.get(pk=course_id)
+                nodes = list(
+                    Node.objects.filter(course=course).only(
+                        "id", "name", "layer", "course_id"
+                    )
                 )
-            )
-            # Only get relations between nodes in this course
-            node_ids = [n.id for n in nodes]
-            rels = list(
-                Relation.objects.filter(
-                    node1_id__in=node_ids, node2_id__in=node_ids
-                ).only("id", "node1_id", "node2_id", "weight")
-            )
+                # Only get relations between nodes in this course
+                node_ids = [n.id for n in nodes]
+                rels = list(
+                    Relation.objects.filter(
+                        node1_id__in=node_ids, node2_id__in=node_ids
+                    ).only("id", "node1_id", "node2_id", "weight")
+                )
+            except Program.DoesNotExist:
+                return Response(
+                    {"detail": f"Course {course_id} not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
         else:
             nodes = list(Node.objects.all().only("id", "name", "layer", "course_id"))
             rels = list(

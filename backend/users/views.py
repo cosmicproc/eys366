@@ -16,8 +16,6 @@ def login(request):
     username = request.data.get("username")
     password = request.data.get("password")
 
-    print(f"Login attempt - Username: {username}, Password: {password}")  # Debug
-
     if not username or not password:
         return Response(
             {"error": "Please provide both username and password"},
@@ -25,8 +23,6 @@ def login(request):
         )
 
     user = authenticate(username=username, password=password)
-
-    print(f"Authenticated user: {user}")  # Debug
 
     if user:
         token, created = Token.objects.get_or_create(user=user)
@@ -60,32 +56,22 @@ def get_current_user(request):
 
 
 class CreateLecturer(APIView):
-    """
-    POST /api/create_lecturer
-    Body: {
-      "username": str,
-      "email": str,
-      "name": str (or "first_name" + "last_name"),
-      "university": str,
-      "department": str,
-      "password": str (optional, defaults to "123")
-    }
-    Creates a new lecturer user account
-    """
-
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # Check if user is department head
+        if request.user.role not in ["department_head", "head"]:
+            return Response(
+                {"detail": "Only department heads can create lecturers"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         username = request.data.get("username", "").strip()
         email = request.data.get("email", "").strip()
-
-        # Support both "name" and "first_name"/"last_name" formats
         name = request.data.get("name", "").strip()
         first_name = request.data.get("first_name", "").strip()
         last_name = request.data.get("last_name", "").strip()
 
-        # If name is not provided, construct from first_name and last_name
         if not name and first_name:
             name = f"{first_name} {last_name}".strip()
 
@@ -93,14 +79,12 @@ class CreateLecturer(APIView):
         department = request.data.get("department", "").strip()
         password = request.data.get("password", "123")
 
-        # Validate required fields
         if not username or not email or not name:
             return Response(
-                {"detail": "username, email, and name (or first_name) are required"},
+                {"detail": "username, email, and name are required"},
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
 
-        # Check if user already exists
         if User.objects.filter(username=username).exists():
             return Response(
                 {"detail": "Username already exists"},
@@ -113,9 +97,7 @@ class CreateLecturer(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Create user with lecturer role
         try:
-            # Split name into first_name and last_name for storage
             name_parts = name.split(" ", 1)
             user = User.objects.create_user(
                 username=username,
@@ -137,17 +119,23 @@ class CreateLecturer(APIView):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_user(request):
+    if request.user.role not in ["department_head", "head", "admin"]:
+        return Response(
+            {"detail": "Permission denied"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    
     serializer = UserSerializer(data=request.data)
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
-    else:
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(["PUT"])
-@permission_classes([AllowAny])  # Add this decorator
+@permission_classes([IsAuthenticated])
 def update_user(request, pk):
     try:
         user = User.objects.get(pk=pk)
@@ -157,33 +145,52 @@ def update_user(request, pk):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # Add partial=True to allow partial updates (e.g., only password)
+    # Allow users to update themselves or heads to update anyone
+    if str(request.user.id) != str(pk) and request.user.role not in ["department_head", "head", "admin"]:
+        return Response(
+            {"detail": "Permission denied"},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
     serializer = UserSerializer(user, data=request.data, partial=True)
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
     
-    print(f"Serializer errors: {serializer.errors}")  # Debug - check terminal
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_user(request, pk):
     try:
-        user = User.objects.get(pk=pk)  # Fixed: objects not object
+        user = User.objects.get(pk=pk)
     except User.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {"detail": "User not found"},
+            status=status.HTTP_404_NOT_FOUND
+        )
 
     serializer = UserSerializer(user)
     return Response(serializer.data)
 
 
 @api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
 def delete_user(request, pk):
+    if request.user.role not in ["department_head", "head", "admin"]:
+        return Response(
+            {"detail": "Only department heads can delete users"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    
     try:
-        user = User.objects.get(pk=pk)  # Fixed: objects not object
+        user = User.objects.get(pk=pk)
     except User.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {"detail": "User not found"},
+            status=status.HTTP_404_NOT_FOUND
+        )
 
     user.delete()
     return Response(status=status.HTTP_204_NO_CONTENT)

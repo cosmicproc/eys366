@@ -23,15 +23,19 @@ function HeaderContent() {
   useEffect(() => {
     if (user && pathname === "/graph") {
       setLoadingCourses(true);
-      const endpoint = "/api/programs/list_courses/"; // Added trailing slash
+      const endpoint = "/api/programs/list_courses/";
       const url = `${
         process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
       }${endpoint}`;
+
+      // Get auth token
+      const token = localStorage.getItem("auth_token");
 
       fetch(url, {
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
+          ...(token ? { Authorization: `Token ${token}` } : {}),
         },
       })
         .then(async (res) => {

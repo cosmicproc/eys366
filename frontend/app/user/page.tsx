@@ -7,7 +7,6 @@ import {
   PasswordInput,
   TextInput,
   Title,
-  Text,
   Stack,
   Group,
 } from "@mantine/core";
@@ -66,12 +65,7 @@ export default function UserSettings() {
 
     try {
       setUpdating(true);
-      await updateUserProfile(user.id, {
-        username: values.username,
-        first_name: values.first_name,
-        last_name: values.last_name,
-        email: values.email,
-      });
+      await updateUserProfile(user.id, values);
       notifications.show({
         title: "Success",
         message: "Profile updated successfully",
@@ -99,8 +93,7 @@ export default function UserSettings() {
       await updateUserPassword(user.id, values.newPassword);
       notifications.show({
         title: "Success",
-        message:
-          "Password updated successfully. Please login again with your new password.",
+        message: "Password updated successfully",
         color: "green",
       });
       passwordForm.reset();
@@ -128,7 +121,6 @@ export default function UserSettings() {
         User Settings
       </Title>
 
-      {/* Profile Information */}
       <Paper shadow="xs" p="xl" mb="xl" withBorder>
         <Title order={2} size="h3" mb="md">
           Profile Information
@@ -168,7 +160,6 @@ export default function UserSettings() {
         </form>
       </Paper>
 
-      {/* Change Password */}
       <Paper shadow="xs" p="xl" withBorder>
         <Title order={2} size="h3" mb="md">
           Change Password
