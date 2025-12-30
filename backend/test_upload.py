@@ -25,7 +25,14 @@ try:
         response = requests.post(url, files=files)
 
     # Print the response
-    print(response.json())
+    response_json = response.json()
+    print(response_json)
+    
+    # Check for the expected keys
+    if 'individual_results' in response_json and 'average_result' in response_json:
+        print("\nTest passed: The response contains the expected keys.")
+    else:
+        print("\nTest failed: The response does not contain the expected keys.")
 
 finally:
     # Clean up the created file
