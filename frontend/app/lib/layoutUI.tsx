@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "./AuthContext";
 import NewItemButton from "./NewItemButton";
+import UploadCSVButton from "./UploadCSVButton";
 
 interface Course {
   id: string;
@@ -71,44 +72,61 @@ function HeaderContent() {
   // Use loaded courses for both roles
   const coursesToShow = courses;
 
+  const handleApplyCSVValues = (values: Record<string, number>) => {
+    console.log("Applying CSV values to graph:", values);
+    // TODO: Implement logic to apply these values to the graph
+    // This could involve:
+    // 1. Matching CSV column names to node names
+    // 2. Updating edge weights based on the values
+    // 3. Visual feedback on the graph
+  };
+
   return (
     <header className="flex justify-between items-center absolute top-0 left-0 w-full z-10 px-8 py-4 pointer-events-none">
-      {/* Left: My Courses */}
-      {isGraphPage && (
+      {/* Left: Action buttons - Show for both head and lecturer */}
+      {isGraphPage && (user.role === "head" || user.role === "lecturer") && (
         <div className="pointer-events-auto gap-4 flex items-center">
-          {/* <Suspense
-            fallback={
-              <Button variant="light" loading>
-                {user.role === "head" ? "All Courses" : "My Courses"}
-              </Button>
-            }
-          >
-            <Menu shadow="md" width={200}>
-              <Menu.Target>
-                <Button variant="light" loading={loadingCourses}>
-                  {user.role === "head" ? "All Courses" : "My Courses"}
+          {/* Only show My Courses dropdown for head */}
+          {user.role === "head" && (
+            <Suspense
+              fallback={
+                <Button variant="light" loading>
+                  All Courses
                 </Button>
-              </Menu.Target>
-              <Menu.Dropdown>
-                {coursesToShow.length === 0 ? (
-                  <Menu.Item disabled>No courses available</Menu.Item>
-                ) : (
-                  coursesToShow.map((course) => (
-                    <Menu.Item
-                      key={course.id}
-                      onClick={() => {
-                        router.push(`/graph?courseId=${course.id}`);
-                      }}
-                    >
-                      {course.name}
-                    </Menu.Item>
-                  ))
-                )}
-              </Menu.Dropdown>
-            </Menu>
-          </Suspense> */}
+              }
+            >
+              <Menu shadow="md" width={200}>
+                <Menu.Target>
+                  <Button variant="light" loading={loadingCourses}>
+                    All Courses
+                  </Button>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  {coursesToShow.length === 0 ? (
+                    <Menu.Item disabled>No courses available</Menu.Item>
+                  ) : (
+                    coursesToShow.map((course) => (
+                      <Menu.Item
+                        key={course.id}
+                        onClick={() => {
+                          router.push(`/graph?courseId=${course.id}`);
+                        }}
+                      >
+                        {course.name}
+                      </Menu.Item>
+                    ))
+                  )}
+                </Menu.Dropdown>
+              </Menu>
+            </Suspense>
+          )}
+
+          {/* Show New Item and Upload buttons for both roles */}
           <Suspense fallback={null}>
             <NewItemButton />
+          </Suspense>
+          <Suspense fallback={null}>
+            <UploadCSVButton onApplyValues={handleApplyCSVValues} />
           </Suspense>
         </div>
       )}
