@@ -76,7 +76,7 @@ function HeaderContent() {
       {/* Left: My Courses */}
       {isGraphPage && (
         <div className="pointer-events-auto gap-4 flex items-center">
-          <Suspense
+          {/* <Suspense
             fallback={
               <Button variant="light" loading>
                 {user.role === "head" ? "All Courses" : "My Courses"}
@@ -106,7 +106,7 @@ function HeaderContent() {
                 )}
               </Menu.Dropdown>
             </Menu>
-          </Suspense>
+          </Suspense> */}
           <Suspense fallback={null}>
             <NewItemButton />
           </Suspense>

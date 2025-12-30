@@ -245,7 +245,7 @@ export default function Home() {
         Quick Actions
       </Title>
       <Grid mb="xl">
-        <Grid.Col span={{ base: 12, sm: 6 }}>
+        {/* <Grid.Col span={{ base: 12, sm: 6 }}>
           <Card
             shadow="sm"
             padding="lg"
@@ -269,7 +269,7 @@ export default function Home() {
               </div>
             </Group>
           </Card>
-        </Grid.Col>
+        </Grid.Col> */}
         <Grid.Col span={{ base: 12, sm: 6 }}>
           <Card
             shadow="sm"
