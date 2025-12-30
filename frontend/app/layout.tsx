@@ -1,6 +1,7 @@
 import "@mantine/core/styles.css";
+import "@mantine/notifications/styles.css";
 import type { Metadata } from "next";
-import { Libre_Baskerville } from "next/font/google";
+import { Outfit } from "next/font/google";
 import "./globals.css";
 
 import {
@@ -8,10 +9,11 @@ import {
     MantineProvider,
     mantineHtmlProps,
 } from "@mantine/core";
+import { Notifications } from "@mantine/notifications";
+
 import RootUILayout from "./lib/layoutUI";
 
-const libreBaskerville = Libre_Baskerville({
-    variable: "--font-librebaskerville-sans",
+const libreBaskerville = Outfit({
     subsets: ["latin"],
     weight: ["400", "700"],
 });
@@ -27,11 +29,7 @@ export default function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <html
-            lang="en"
-            {...mantineHtmlProps}
-            className={libreBaskerville.variable}
-        >
+        <html lang="en" {...mantineHtmlProps}>
             <head>
                 <ColorSchemeScript />
             </head>
@@ -39,6 +37,7 @@ export default function RootLayout({
                 className={`${libreBaskerville.className} flex min-h-screen flex-col`}
             >
                 <MantineProvider>
+                    <Notifications position="top-right" />
                     <RootUILayout>{children}</RootUILayout>
                 </MantineProvider>
             </body>
