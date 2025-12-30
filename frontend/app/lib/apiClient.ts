@@ -568,3 +568,33 @@ export interface Course {
   university?: string;
   department?: string;
 }
+
+export async function requestPasswordReset(email: string): Promise<{ message: string }> {
+  const response = await fetch(`${getBaseUrl()}/api/users/request-password-reset/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: "Failed to send reset email" }));
+    throw new Error(error.error || "Failed to send reset email");
+  }
+  
+  return response.json();
+}
+
+export async function resetPassword(token: string, password: string): Promise<{ message: string }> {
+  const response = await fetch(`${getBaseUrl()}/api/users/reset-password/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, password }),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: "Failed to reset password" }));
+    throw new Error(error.error || "Failed to reset password");
+  }
+  
+  return response.json();
+}

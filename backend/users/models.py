@@ -40,6 +40,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     date_joined = models.DateTimeField(default=timezone.now, verbose_name="Kayıt Tarihi")
     is_active = models.BooleanField(default=True)  # Changed to True
     is_staff = models.BooleanField(default=False)
+    reset_token = models.CharField(max_length=100, null=True, blank=True)
+    reset_token_expiry = models.DateTimeField(null=True, blank=True)
     
     objects = UserManager()
     
