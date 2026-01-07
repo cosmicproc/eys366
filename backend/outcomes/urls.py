@@ -1,11 +1,6 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from .views import ProgramOutcomeViewSet, LearningOutcomeViewSet
-
-router = DefaultRouter()
-router.register(r'program-outcomes', ProgramOutcomeViewSet, basename='program-outcome')
-router.register(r'learning-outcomes', LearningOutcomeViewSet, basename='learning-outcome')
+from django.urls import path
+from . import views
 
 urlpatterns = [
-    path('', include(router.urls)),
+    path('upload/', views.upload_grades, name='upload_grades'),
 ]
