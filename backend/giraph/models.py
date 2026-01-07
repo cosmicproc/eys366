@@ -14,9 +14,11 @@ class Node(models.Model):
     course = models.ForeignKey(
         Program, on_delete=models.CASCADE, related_name="nodes", null=True, blank=True
     )
+    # Optional numeric score assigned from CSV imports or other sources
+    score = models.FloatField(null=True, blank=True)
 
     def __str__(self):
-        return f"{self.id} | {self.layer} | {self.name}"
+        return f"{self.id} | {self.layer} | {self.name}" 
 
 
 class Relation(models.Model):

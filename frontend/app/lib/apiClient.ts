@@ -74,6 +74,7 @@ export interface NodeData {
     id: number;
     name: string;
     relations: NodeRelation[];
+    score?: number; // optional score applied via CSV import
 }
 
 export interface GetNodesResponse {
@@ -86,7 +87,7 @@ export interface GetNodesResponse {
 
 function getAuthHeaders(): Record<string, string> {
     if (typeof localStorage === "undefined") return {};
-    const token = localStorage.getItem("auth_token");
+    const token = localStorage.getItem("token");
     return token ? { Authorization: `Token ${token}` } : {};
 }
 
@@ -104,6 +105,79 @@ export async function getNodes(
         },
     });
     return handleResponse<GetNodesResponse>(response);
+}
+
+export async function applyScores(values: Record<string, number>, courseId?: string | number): Promise<GetNodesResponse> {
+    const url = `${getApiBase()}/apply_scores/`;
+
+    // Build request options once so we can reuse them in a retry if needed
+    const options: RequestInit = {
+        method: "POST",
+        credentials: "include",
+        headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ values, course_id: courseId }),
+        // Prevent automatic redirect following so we can handle 301/302 and avoid
+        // the browser turning a POST into a GET on redirect which causes 405s.
+        redirect: "manual",
+    };
+
+    // First attempt
+    let response = await fetch(url, options);
+
+    // If server redirected (301/302) and provided Location header, retry POST to the new location.
+    if ((response.status === 301 || response.status === 302) && response.headers.get("Location")) {
+        const location = response.headers.get("Location")!;
+        // Absolute or relative location handling
+        const retryUrl = location.startsWith("http") ? location : new URL(location, url).toString();
+        response = await fetch(retryUrl, options);
+    }
+
+    // If we still got 405, attempt to detect a trailing-slash redirect scenario: try posting to same path without/with trailing slash.
+    if (response.status === 405) {
+        // Try the variant without the trailing slash
+        const altUrl = url.endsWith("/") ? url.slice(0, -1) : `${url}/`;
+        // Only retry if it's different
+        if (altUrl !== url) {
+            response = await fetch(altUrl, options);
+        }
+    }
+
+    // For diagnostics: if still not ok, include response text in thrown error payload
+    if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        const contentType = response.headers.get("Content-Type") || "";
+        let payload: unknown = text;
+        if (contentType.includes("application/json")) {
+            try { payload = JSON.parse(text); } catch {}
+        }
+        throw new ApiError(
+            (payload && typeof payload === 'object' && ((payload as any).detail || (payload as any).error)) || response.statusText || `Request failed (${response.status})`,
+            response.status,
+            payload
+        );
+    }
+
+    return handleResponse<GetNodesResponse>(response);
+}
+
+export async function calculateStudentResults(studentId: string, courseId?: string | number): Promise<{
+    course_contents: {id:number,name:string,student_grade:number}[];
+    learning_outcomes: {id:number,name:string,calculated_score:number}[];
+    program_outcomes: {id:number,name:string,calculated_score:number}[];
+}> {
+    const url = `${getApiBase()}/calculate_student_results/?student_id=${encodeURIComponent(studentId)}${courseId ? `&courseId=${encodeURIComponent(String(courseId))}` : ''}`;
+    const response = await fetch(url, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+        }
+    });
+    return handleResponse<any>(response);
 }
 
 export async function createRelation(
@@ -223,7 +297,7 @@ export async function login(
     password: string
 ): Promise<{ token: string; user: User }> {
     const response = await fetch(
-        `${getBaseUrl()}/api/users/login/`,
+        `${getBaseUrl()}/api/auth/login/`,
         {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -235,7 +309,7 @@ export async function login(
 }
 
 export async function logout(): Promise<void> {
-    await fetch(`${getBaseUrl()}/api/users/logout/`, {
+    await fetch(`${getBaseUrl()}/api/auth/logout/`, {
         method: "POST",
         headers: { 
             "Content-Type": "application/json",
@@ -247,7 +321,7 @@ export async function logout(): Promise<void> {
 
 export async function getUserInfo(): Promise<User> {
     const response = await fetch(
-        `${getBaseUrl()}/api/users/me/`,
+        `${getBaseUrl()}/api/auth/me/`,
         {
             headers: { 
                 "Content-Type": "application/json",

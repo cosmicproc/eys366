@@ -7,6 +7,7 @@ import { Suspense, useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "./AuthContext";
 import NewItemButton from "./NewItemButton";
 import UploadCSVButton from "./UploadCSVButton";
+import { applyScores } from "./apiClient";
 
 interface Course {
   id: string;
@@ -30,7 +31,7 @@ function HeaderContent() {
       }${endpoint}`;
 
       // Get auth token
-      const token = localStorage.getItem("auth_token");
+      const token = localStorage.getItem("token");
 
       fetch(url, {
         credentials: "include",
@@ -72,13 +73,32 @@ function HeaderContent() {
   // Use loaded courses for both roles
   const coursesToShow = courses;
 
-  const handleApplyCSVValues = (values: Record<string, number>) => {
-    console.log("Applying CSV values to graph:", values);
-    // TODO: Implement logic to apply these values to the graph
-    // This could involve:
-    // 1. Matching CSV column names to node names
-    // 2. Updating edge weights based on the values
-    // 3. Visual feedback on the graph
+  const handleApplyCSVValues = async (values: Record<string, number>, studentId?: string) => {
+    console.log("Applying CSV values to graph:", values, "studentId:", studentId);
+
+    // Call backend to persist mapped values on nodes and refresh graph
+    try {
+      const courseIdMatch = window.location.search.match(/courseId=([^&]+)/);
+      const courseId = courseIdMatch ? decodeURIComponent(courseIdMatch[1]) : undefined;
+      const res = await applyScores(values, courseId);
+
+      // Notify graph area to reload data
+      window.dispatchEvent(new Event("scoresUpdated"));
+
+      // If a studentId was provided, fetch calculated student results and dispatch event
+      if (studentId) {
+        try {
+          const studentResults = await (await import("./apiClient")).calculateStudentResults(studentId, courseId);
+          window.dispatchEvent(new CustomEvent("studentResultsUpdated", { detail: studentResults }));
+        } catch (err) {
+          console.error("Failed to fetch student results:", err);
+        }
+      }
+
+      console.log("Applied scores, updated graph response:", res);
+    } catch (err) {
+      console.error("Failed to apply scores to graph:", err);
+    }
   };
 
   return (

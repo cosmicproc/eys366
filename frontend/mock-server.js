@@ -1,12 +1,12 @@
-const express = require('express');
-const cors = require('cors');
-const bodyParser = require('body-parser');
+// DEPRECATED: mock-server.js
+// This file is intentionally disabled. Authentication and API calls should go
+// to the real Django backend at http://127.0.0.1:8000 (e.g., /api/auth/login/).
+// Keeping this file (disabled) prevents accidental use. To remove completely,
+// delete this file from the repo once you're confident the frontend points to
+// the real backend.
 
-const app = express();
-const PORT = 8000;
-
-app.use(cors());
-app.use(bodyParser.json());
+console.error('mock-server.js is DEPRECATED. Use the Django backend at http://127.0.0.1:8000/api/auth/');
+process.exit(0);
 
 // --- Mock Data ---
 

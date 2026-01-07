@@ -122,7 +122,7 @@ export default function ProgramPage() {
   }, [user, loading, router]);
 
   const getAuthHeaders = () => {
-    const token = localStorage.getItem("auth_token");
+    const token = localStorage.getItem("token");
     return {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Token ${token}` } : {}),

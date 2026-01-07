@@ -18,7 +18,7 @@ interface CSVData {
 }
 
 interface UploadCSVButtonProps {
-  onApplyValues: (values: Record<string, number>) => void;
+  onApplyValues: (values: Record<string, number>, studentId?: string) => void;
 }
 
 export default function UploadCSVButton({
@@ -130,37 +130,66 @@ export default function UploadCSVButton({
   };
 
   // Handle OK button
-  const handleApply = () => {
+  const handleApply = async () => {
     setError(null);
 
-    if (!csvData) {
+    if (!csvData && !csvFile) {
       setError("Please upload a CSV file first");
       return;
     }
 
-    let values: Record<string, number>;
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-    if (useAverage) {
-      values = calculateAverages();
-    } else if (selectedStudentId) {
-      values = getStudentValues();
-    } else {
-      setError("Please select a student or use average values");
-      return;
+    try {
+      let mappedValues: Record<string, number> = {};
+
+      if (csvFile) {
+        // Send file to backend for processing (supports CSV and Excel)
+        const form = new FormData();
+        form.append("file", csvFile);
+        form.append("mode", useAverage ? "average" : "student");
+        if (selectedStudentId) form.append("student_id", selectedStudentId);
+
+        const token = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
+
+        const res = await fetch(`${API_URL}/api/outcomes/upload_grades/`, {
+          method: "POST",
+          credentials: "include",
+          headers: token ? { Authorization: `Token ${token}` } : {},
+          body: form,
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Failed to upload CSV to server");
+        }
+
+        const data = await res.json();
+        // Expecting { mapped_values: { colName: value }, ... }
+        mappedValues = data.mapped_values || {};
+      } else {
+        // No file object (parsed CSV only) - fallback to local computation
+        mappedValues = useAverage ? calculateAverages() : getStudentValues();
+      }
+
+      if (Object.keys(mappedValues).length === 0) {
+        setError("No valid numeric data found after processing");
+        return;
+      }
+
+      // Apply to graph via callback, pass selected student id if any
+      onApplyValues(mappedValues, selectedStudentId || undefined);
+
+      setModalOpen(false);
+      // Reset state
+      setCsvFile(null);
+      setCsvData(null);
+      setSelectedStudentId(null);
+      setUseAverage(false);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || String(err));
     }
-
-    if (Object.keys(values).length === 0) {
-      setError("No valid numeric data found");
-      return;
-    }
-
-    onApplyValues(values);
-    setModalOpen(false);
-    // Reset state
-    setCsvFile(null);
-    setCsvData(null);
-    setSelectedStudentId(null);
-    setUseAverage(false);
   };
 
   return (

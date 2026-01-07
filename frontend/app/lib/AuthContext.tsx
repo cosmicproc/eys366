@@ -51,11 +51,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const initAuth = async () => {
-      const token = localStorage.getItem("auth_token");
+      const token = localStorage.getItem("token");
+      const cachedUser = localStorage.getItem("user");
+
       if (token) {
         try {
           const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/users/me/`,
+            `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/auth/me/`,
             {
               credentials: "include",
               headers: {
@@ -68,19 +70,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const userData = await response.json();
             setUser(normalizeUserData(userData));
           } else {
-            localStorage.removeItem("auth_token");
+            localStorage.removeItem("token");
+            localStorage.removeItem("user");
           }
         } catch {
-          localStorage.removeItem("auth_token");
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+        }
+      } else if (cachedUser) {
+        try {
+          setUser(normalizeUserData(JSON.parse(cachedUser)));
+        } catch {
+          localStorage.removeItem("user");
         }
       }
+
       setLoading(false);
     };
     initAuth();
   }, []);
 
   const login = async (username: string, password: string) => {
-    const response = await fetch(`${API_URL}/api/users/login/`, {
+    const response = await fetch(`${API_URL}/api/auth/login/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -95,15 +106,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const data = await response.json();
-    localStorage.setItem("auth_token", data.token);
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("user", JSON.stringify(data.user));
     setUser(normalizeUserData(data.user));
   };
 
   const logout = async () => {
     try {
-      const token = localStorage.getItem("auth_token");
+      const token = localStorage.getItem("token");
       if (token) {
-        await fetch(`${API_URL}/api/users/logout/`, {
+        await fetch(`${API_URL}/api/auth/logout/`, {
           method: "POST",
           headers: {
             Authorization: `Token ${token}`,
@@ -111,7 +123,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
       }
     } finally {
-      localStorage.removeItem("auth_token");
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
       setUser(null);
       window.location.href = "/login";
     }

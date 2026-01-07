@@ -154,6 +154,10 @@ class GetNodes(APIView):
         cc, co, po = [], [], []
         for n in nodes:
             pack = {"id": n.id, "name": n.name, "relations": rel_map.get(n.id, [])}
+            # Include score if present
+            if hasattr(n, 'score') and n.score is not None:
+                pack['score'] = float(n.score)
+
             if n.layer == LayerChoices.COURSE_CONTENT:
                 cc.append(pack)
             elif n.layer == LayerChoices.COURSE_OUTCOME:
@@ -293,12 +297,152 @@ class GetProgramOutcomes(APIView):
 
     def get(self, request):
         outcomes = list(
-            Node.objects.filter(layer=LayerChoices.PROGRAM_OUTCOME).values("id", "name")
+            Node.objects.filter(layer=LayerChoices.PROGRAM_OUTCOME).values("id", "name", "score")
         )
         return Response(
             {"program_outcomes": outcomes},
             status=status.HTTP_200_OK,
         )
+
+
+class ApplyScores(APIView):
+    """POST /api/giraph/apply_scores/
+
+    Body: { "values": { "header": number, ... }, "course_id": <uuid?> }
+    Maps headers to course_content nodes, sets Node.score and returns updated GetNodes response.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        payload = request.data
+        values = payload.get("values", {})
+        course_id = payload.get("course_id")
+
+        if not isinstance(values, dict) or not values:
+            return Response({"detail": "values must be a non-empty object"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Map headers to nodes
+        mapping = {}
+        for col, val in values.items():
+            normalized = str(col).rsplit("_", 1)[0].strip()
+            node = None
+            try:
+                node = Node.objects.get(name__iexact=col, layer=LayerChoices.COURSE_CONTENT)
+            except Node.DoesNotExist:
+                try:
+                    node = Node.objects.get(name__iexact=normalized, layer=LayerChoices.COURSE_CONTENT)
+                except Node.DoesNotExist:
+                    node = Node.objects.filter(name__icontains=normalized, layer=LayerChoices.COURSE_CONTENT).first()
+
+            # If node not found but a course_id is provided, try to create the node (and CourseContent if missing)
+            if not node and course_id:
+                try:
+                    from outcomes.models import CourseContent
+                    cc = CourseContent.objects.filter(name__iexact=normalized).first()
+                    if not cc:
+                        cc = CourseContent.objects.create(name=normalized)
+                    # Ensure the Node is created for this course
+                    try:
+                        course = Program.objects.get(pk=course_id)
+                        node = Node.objects.create(name=cc.name, layer=LayerChoices.COURSE_CONTENT, course=course)
+                    except Program.DoesNotExist:
+                        node = None
+                except Exception:
+                    node = None
+
+            if node:
+                try:
+                    node.score = float(val)
+                    node.save(update_fields=["score"])
+                    # Also persist score on CourseContent if exists
+                    try:
+                        from outcomes.models import CourseContent
+                        cc = CourseContent.objects.filter(name__iexact=node.name).first()
+                        if cc:
+                            cc.score = float(val)
+                            cc.save(update_fields=['score'])
+                    except Exception:
+                        pass
+
+                    mapping[node.name] = float(val)
+                except Exception:
+                    continue
+
+        # Re-use GetNodes to return the latest nodes (filter by course_id if provided)
+        request._request.GET = request._request.GET.copy()
+        if course_id:
+            request._request.GET['courseId'] = course_id
+        get_view = GetNodes.as_view()
+        return get_view(request._request)
+
+
+class CreateProgramOutcome(APIView):
+    authentication_classes = []   # 🔴 şimdilik kapatıyoruz test için
+    permission_classes = [AllowAny]
+    http_method_names = ['post']   # 🔴 BUNU EKLE
+
+    def post(self, request):
+        payload = request.data
+        values = payload.get("values", {})
+        course_id = payload.get("course_id")
+
+        if not isinstance(values, dict) or not values:
+            return Response({"detail": "values must be a non-empty object"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Map headers to nodes
+        mapping = {}
+        for col, val in values.items():
+            normalized = str(col).rsplit("_", 1)[0].strip()
+            node = None
+            try:
+                node = Node.objects.get(name__iexact=col, layer=LayerChoices.COURSE_CONTENT)
+            except Node.DoesNotExist:
+                try:
+                    node = Node.objects.get(name__iexact=normalized, layer=LayerChoices.COURSE_CONTENT)
+                except Node.DoesNotExist:
+                    node = Node.objects.filter(name__icontains=normalized, layer=LayerChoices.COURSE_CONTENT).first()
+
+            # If node not found but a course_id is provided, try to create the node (and CourseContent if missing)
+            if not node and course_id:
+                try:
+                    from outcomes.models import CourseContent
+                    cc = CourseContent.objects.filter(name__iexact=normalized).first()
+                    if not cc:
+                        cc = CourseContent.objects.create(name=normalized)
+                    # Ensure the Node is created for this course
+                    try:
+                        course = Program.objects.get(pk=course_id)
+                        node = Node.objects.create(name=cc.name, layer=LayerChoices.COURSE_CONTENT, course=course)
+                    except Program.DoesNotExist:
+                        node = None
+                except Exception:
+                    node = None
+
+            if node:
+                try:
+                    node.score = float(val)
+                    node.save(update_fields=["score"])
+                    # Also persist score on CourseContent if exists
+                    try:
+                        from outcomes.models import CourseContent
+                        cc = CourseContent.objects.filter(name__iexact=node.name).first()
+                        if cc:
+                            cc.score = float(val)
+                            cc.save(update_fields=['score'])
+                    except Exception:
+                        pass
+
+                    mapping[node.name] = float(val)
+                except Exception:
+                    continue
+
+        # Re-use GetNodes to return the latest nodes (filter by course_id if provided)
+        request._request.GET = request._request.GET.copy()
+        if course_id:
+            request._request.GET['courseId'] = course_id
+        get_view = GetNodes.as_view()
+        return get_view(request._request)
 
 
 class CreateProgramOutcome(APIView):
@@ -335,6 +479,24 @@ class CreateProgramOutcome(APIView):
         )
 
 
+class CalculateStudentResults(APIView):
+    """GET /api/giraph/calculate_student_results/?student_id=XXX&courseId=..."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        student_id = request.query_params.get("student_id")
+        course_id = request.query_params.get("courseId")
+
+        if not student_id:
+            return Response({"detail": "student_id is required"}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+        from .services import compute_student_results
+        res = compute_student_results(student_id=student_id, course_id=course_id)
+        return Response(res, status=status.HTTP_200_OK)
+
+
 class DeleteProgramOutcome(APIView):
     """DELETE /api/giraph/delete_program_outcome
     Body: {"outcome_id": int}
@@ -369,28 +531,3 @@ class DeleteProgramOutcome(APIView):
         )
 
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_nodes(request):
-    course_id = request.query_params.get('course_id')
-    
-    # Get program outcomes - these are always returned regardless of course_id
-    program_outcomes = Node.objects.filter(layer='program_outcome')
-    
-    if course_id:
-        # Filter course contents and course outcomes by course_id
-        course_contents = Node.objects.filter(layer='course_content', course_id=course_id)
-        course_outcomes = Node.objects.filter(layer='course_outcome', course_id=course_id)
-    else:
-        # Return all nodes
-        course_contents = Node.objects.filter(layer='course_content')
-        course_outcomes = Node.objects.filter(layer='course_outcome')
-    
-    # Build response with all program outcomes always included
-    response_data = {
-        'course_contents': serialize_nodes(course_contents),
-        'course_outcomes': serialize_nodes(course_outcomes),
-        'program_outcomes': serialize_nodes(program_outcomes),  # Always included
-    }
-    
-    return Response(response_data)

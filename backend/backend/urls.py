@@ -20,4 +20,14 @@ from django.urls import path, include
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('outcomes/', include('outcomes.urls')),
+
+    # API route namespaces
+    path('api/auth/', include('users.urls')),
+    path('api/users/', include('users.urls')),
+
+    # Programs and Giraph endpoints expected by the frontend
+    path('api/programs/', include('programs.urls')),
+    path('api/giraph/', include('giraph.urls')),
+    # Expose outcomes upload API under /api/outcomes/
+    path('api/outcomes/', include('outcomes.urls')),
 ]

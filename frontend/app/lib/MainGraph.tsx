@@ -9,7 +9,7 @@ import {
   TextInput,
 } from "@mantine/core";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
   ReactFlow,
   Background,
@@ -18,6 +18,7 @@ import {
   addEdge,
   useEdgesState,
   useNodesState,
+  Position,
   type Connection,
   type Edge,
   type Node,
@@ -31,13 +32,13 @@ import {
   deleteNode as apiDeleteNode,
   getNodes,
   updateNode as apiUpdateNode,
+  calculateStudentResults,
   type GetNodesResponse,
 } from "./apiClient";
 import GraphNode from "./GraphNode";
 
 type AppNode = Node<{ label: string; apiId: number }>;
 
-// We'll inject edit/delete handlers via a wrapper component for React Flow nodeTypes
 const createNodeTypes = (
   onEdit: (apiId: number, currentName: string) => void,
   onDelete: (apiId: number, currentName: string) => void
@@ -47,19 +48,29 @@ const createNodeTypes = (
   ),
 });
 
-// Helper function to convert API data to React Flow nodes
-const convertToNodes = (data: GetNodesResponse): Node[] => {
+const convertToNodes = (data: GetNodesResponse, studentResults?: any): Node[] => {
   const nodes: Node[] = [];
   let yOffset = 100;
 
-  // Course Content nodes
+  // Course Content
   data.course_contents.forEach((node, index) => {
+    let label = node.name;
+    if (studentResults && studentResults.course_contents) {
+      const match = studentResults.course_contents.find((c:any)=>c.id === node.id);
+      if (match) {
+        label = `${node.name} : ${match.student_grade}`;
+      }
+    } else if (node.score !== undefined && node.score !== null) {
+      label = `${node.name}\nScore: ${parseFloat(String(node.score)).toFixed(2)}`;
+    }
+
     nodes.push({
       id: `cc-${node.id}`,
       type: "graphnode",
       position: { x: 50, y: yOffset + index * 120 },
-      data: { label: node.name, apiId: node.id },
-      sourcePosition: "right" as const,
+      // Course Content: source (outgoing) handles on the right
+      sourcePosition: Position.Right,
+      data: { label, apiId: node.id },
       style: {
         background: "#e3f2fd",
         border: "2px solid #1976d2",
@@ -70,16 +81,25 @@ const convertToNodes = (data: GetNodesResponse): Node[] => {
     });
   });
 
-  // Course Outcomes nodes
+  // Course Outcomes
   yOffset = 80;
   data.course_outcomes.forEach((node, index) => {
+    let label = node.name;
+    if (studentResults && studentResults.learning_outcomes) {
+      const match = studentResults.learning_outcomes.find((c:any)=>c.id === node.id);
+      if (match) {
+        label = `${node.name} : ${match.calculated_score.toFixed(2)}`;
+      }
+    }
+
     nodes.push({
       id: `co-${node.id}`,
       type: "graphnode",
       position: { x: 500, y: yOffset + index * 120 },
-      data: { label: node.name, apiId: node.id },
-      sourcePosition: "right" as const,
-      targetPosition: "left" as const,
+      // Course Outcome: accept incoming on left and provide outgoing on right
+      targetPosition: Position.Left,
+      sourcePosition: Position.Right,
+      data: { label, apiId: node.id },
       style: {
         background: "#f3e5f5",
         border: "2px solid #7b1fa2",
@@ -90,15 +110,24 @@ const convertToNodes = (data: GetNodesResponse): Node[] => {
     });
   });
 
-  // Program Outcomes nodes
+  // Program Outcomes
   yOffset = 100;
   data.program_outcomes.forEach((node, index) => {
+    let label = node.name;
+    if (studentResults && studentResults.program_outcomes) {
+      const match = studentResults.program_outcomes.find((c:any)=>c.id === node.id);
+      if (match) {
+        label = `${node.name} : ${match.calculated_score.toFixed(2)}`;
+      }
+    }
+
     nodes.push({
       id: `po-${node.id}`,
       type: "graphnode",
       position: { x: 950, y: yOffset + index * 120 },
-      data: { label: node.name, apiId: node.id },
-      targetPosition: "left" as const,
+      // Program Outcome: only accept incoming connections (from CO)
+      targetPosition: Position.Left,
+      data: { label, apiId: node.id },
       style: {
         background: "#fff3e0",
         border: "2px solid #f57c00",
@@ -199,8 +228,8 @@ export default function MainGraph() {
   const searchParams = useSearchParams();
   const courseId = searchParams.get("courseId");
 
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState([] as Node[]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([] as Edge[]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -230,11 +259,31 @@ export default function MainGraph() {
       setError(null);
       try {
         const data = await getNodes(courseId || undefined);
-        const newNodes = convertToNodes(data);
+        // Keep last loaded data for future re-render with student results
+        lastLoadedDataRef.current = data;
+
+        // Initial render without student-specific values (we'll fetch them next)
+        const newNodes = convertToNodes(data, studentResults);
         const newEdges = convertToEdges(data);
 
         setNodes(newNodes);
         setEdges(newEdges);
+
+        // Determine studentId: prefer localStorage, fallback to a hardcoded temporary id
+        const studentId = typeof localStorage !== 'undefined'
+          ? localStorage.getItem('selectedStudentId') || '221401005'
+          : '221401005';
+
+        try {
+          const sr = await calculateStudentResults(studentId, courseId || undefined);
+          setStudentResults(sr);
+          // Rebuild nodes with student results applied
+          const nodesWithStudent = convertToNodes(data, sr);
+          setNodes(nodesWithStudent);
+        } catch (err) {
+          // If student results fetch fails, log but keep showing the base graph
+          console.error('Failed to fetch student results:', err);
+        }
       } catch (err) {
         setError("Failed to load graph data");
         console.error("Error loading graph:", err);
@@ -244,7 +293,39 @@ export default function MainGraph() {
     };
 
     loadGraph();
+
+    // Listen for external events and reload or update
+    const onScoresUpdated = () => loadGraph();
+    const onStudentResultsUpdated = async (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setStudentResults(detail);
+
+      // Re-render nodes to include student values. If we don't have last loaded data,
+      // fetch nodes first, otherwise reuse cached data.
+      try {
+        let data = lastLoadedDataRef.current;
+        if (!data) {
+          data = await getNodes(courseId || undefined);
+          lastLoadedDataRef.current = data;
+        }
+        const newNodes = convertToNodes(data, detail);
+        setNodes(newNodes);
+      } catch (err) {
+        console.error('Failed to apply student results to nodes', err);
+      }
+    };
+
+    window.addEventListener("scoresUpdated", onScoresUpdated);
+    window.addEventListener("studentResultsUpdated", onStudentResultsUpdated as EventListener);
+    return () => {
+      window.removeEventListener("scoresUpdated", onScoresUpdated);
+      window.removeEventListener("studentResultsUpdated", onStudentResultsUpdated as EventListener);
+    };
   }, [courseId, setNodes, setEdges]);
+
+  // Keep last loaded API data so UI can re-render with student results
+  const lastLoadedDataRef = useRef<GetNodesResponse | null>(null);
+  const [studentResults, setStudentResults] = useState<any | null>(null);
 
   // Close weight modal
   const closeWeightModal = () => {
