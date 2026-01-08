@@ -1,4 +1,5 @@
 import "@mantine/core/styles.css";
+import "@mantine/notifications/styles.css";
 import type { Metadata } from "next";
 import { Outfit } from "next/font/google";
 import "./globals.css";
@@ -8,6 +9,8 @@ import {
     MantineProvider,
     mantineHtmlProps,
 } from "@mantine/core";
+import { Notifications } from "@mantine/notifications";
+
 import RootUILayout from "./lib/layoutUI";
 
 const libreBaskerville = Outfit({
@@ -18,6 +21,9 @@ const libreBaskerville = Outfit({
 export const metadata: Metadata = {
     title: process.env.APP_NAME,
     description: "",
+    icons: {
+        icon: "/eys366.png",
+    },
 };
 
 export default function RootLayout({
@@ -34,6 +40,7 @@ export default function RootLayout({
                 className={`${libreBaskerville.className} flex min-h-screen flex-col`}
             >
                 <MantineProvider>
+                    <Notifications position="top-right" />
                     <RootUILayout>{children}</RootUILayout>
                 </MantineProvider>
             </body>

@@ -11,37 +11,40 @@ import {
 import {
     Background,
     Controls,
-    MiniMap,
     Position,
     ReactFlow,
     addEdge,
-    applyEdgeChanges,
-    applyNodeChanges,
+    useEdgesState,
+    useNodesState,
     type Connection,
     type Edge,
-    type EdgeChange,
     type Node,
-    type NodeChange,
-    type NodeProps,
+    type NodeProps
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+    deleteNode as apiDeleteNode,
+    updateNode as apiUpdateNode,
+    calculateStudentResults,
     createRelation,
     deleteRelation,
     getNodes,
     updateRelation,
     type GetNodesResponse,
 } from "./apiClient";
-import { useAuth } from "./AuthContext";
 import GraphNode from "./GraphNode";
 
-// Define custom node type
-type AppNodeData = { label: string; apiId: number };
-type AppNode = Node<AppNodeData, "graphnode">;
+type AppNode = Node<{ label: string; apiId: number; score?: number }>;
 
-// We'll inject edit/delete handlers via a wrapper component for React Flow nodeTypes
+const DISTINCT_COLORS = [
+    "#1976d2", "#388e3c", "#d32f2f", "#7b1fa2", "#0288d1", 
+    "#fbc02d", "#e64a19", "#5d4037", "#455a64", "#0097a7", 
+    "#c2185b", "#512da8", "#303f9f", "#00796b", "#689f38", 
+    "#afb42b", "#f57c00", "#795548", "#607d8b"
+];
+
 const createNodeTypes = (
     onEdit: (apiId: number, currentName: string) => void,
     onDelete: (apiId: number, currentName: string) => void
@@ -51,72 +54,124 @@ const createNodeTypes = (
     ),
 });
 
-// Helper function to convert API data to React Flow nodes
-const convertToNodes = (data: GetNodesResponse): Node[] => {
+const convertToNodes = (
+    data: GetNodesResponse,
+    studentResults?: any
+): Node[] => {
+    // 1. Calculate scores for all nodes first
+    const calculatedScores = new Map<string, number>();
+    let hasAnyNonZeroScore = false;
+
+    // Helper to process score
+    const regScore = (key: string, score: number | undefined | null) => {
+        if (score !== undefined && score !== null) {
+            const val = typeof score === 'string' ? parseFloat(score) : score;
+            calculatedScores.set(key, val);
+            if (val > 0) hasAnyNonZeroScore = true;
+        }
+    };
+
+    data.course_contents.forEach((node) => {
+        let score: number | undefined;
+        if (studentResults && studentResults.course_contents) {
+             const match = studentResults.course_contents.find((c: any) => c.id === node.id);
+             if (match) score = match.student_grade;
+        } else if (node.score !== undefined && node.score !== null) {
+             score = node.score;
+        }
+        regScore(`cc-${node.id}`, score);
+    });
+
+    data.course_outcomes.forEach((node) => {
+        let score: number | undefined;
+        if (studentResults && studentResults.learning_outcomes) {
+             const match = studentResults.learning_outcomes.find((c: any) => c.id === node.id);
+             if (match) score = match.calculated_score;
+        }
+        regScore(`co-${node.id}`, score);
+    });
+
+    data.program_outcomes.forEach((node) => {
+        let score: number | undefined;
+        if (studentResults && studentResults.program_outcomes) {
+             const match = studentResults.program_outcomes.find((c: any) => c.id === node.id);
+             if (match) score = match.calculated_score;
+        }
+        regScore(`po-${node.id}`, score);
+    });
+
     const nodes: Node[] = [];
     let yOffset = 100;
 
-    // Course Content nodes
+    // Course Content
     data.course_contents.forEach((node, index) => {
+        let score = calculatedScores.get(`cc-${node.id}`);
+        // If all scores are zero, hide them (pass undefined)
+        if (!hasAnyNonZeroScore) score = undefined;
+
         nodes.push({
-            id: `course_content-${node.id}`,
-            position: { x: 50, y: yOffset + index * 100 },
-            data: { label: node.name, apiId: node.id },
+            id: `cc-${node.id}`,
             type: "graphnode",
+            position: { x: 50, y: yOffset + index * 120 },
             draggable: false,
+            // Course Content: source (outgoing) handles on the right
             sourcePosition: Position.Right,
-            targetPosition: Position.Right,
+            data: { label: node.name, apiId: node.id, score },
             style: {
                 background: "#e3f2fd",
                 border: "2px solid #1976d2",
                 borderRadius: "8px",
                 padding: "10px",
-                fontSize: "12px",
-                width: 180,
+                minWidth: "150px",
             },
         });
     });
 
-    // Course Outcomes nodes
+    // Course Outcomes
     yOffset = 80;
     data.course_outcomes.forEach((node, index) => {
+        let score = calculatedScores.get(`co-${node.id}`);
+        if (!hasAnyNonZeroScore) score = undefined;
+
         nodes.push({
-            id: `course_outcome-${node.id}`,
-            position: { x: 400, y: yOffset + index * 100 },
-            data: { label: node.name, apiId: node.id },
+            id: `co-${node.id}`,
             type: "graphnode",
+            position: { x: 500, y: yOffset + index * 120 },
             draggable: false,
-            sourcePosition: Position.Right,
+            // Course Outcome: accept incoming on left and provide outgoing on right
             targetPosition: Position.Left,
+            sourcePosition: Position.Right,
+            data: { label: node.name, apiId: node.id, score },
             style: {
                 background: "#f3e5f5",
                 border: "2px solid #7b1fa2",
                 borderRadius: "8px",
                 padding: "10px",
-                fontSize: "12px",
-                width: 180,
+                minWidth: "150px",
             },
         });
     });
 
-    // Program Outcomes nodes
+    // Program Outcomes
     yOffset = 100;
     data.program_outcomes.forEach((node, index) => {
+        let score = calculatedScores.get(`po-${node.id}`);
+        if (!hasAnyNonZeroScore) score = undefined;
+
         nodes.push({
-            id: `program_outcome-${node.id}`,
-            position: { x: 750, y: yOffset + index * 100 },
-            data: { label: node.name, apiId: node.id },
+            id: `po-${node.id}`,
             type: "graphnode",
+            position: { x: 950, y: yOffset + index * 120 },
             draggable: false,
-            sourcePosition: Position.Left,
+            // Program Outcome: only accept incoming connections (from CO)
             targetPosition: Position.Left,
+            data: { label: node.name, apiId: node.id, score },
             style: {
-                background: "#e8f5e9",
-                border: "2px solid #388e3c",
+                background: "#fff3e0",
+                border: "2px solid #f57c00",
                 borderRadius: "8px",
                 padding: "10px",
-                fontSize: "12px",
-                width: 200,
+                minWidth: "150px",
             },
         });
     });
@@ -124,89 +179,200 @@ const convertToNodes = (data: GetNodesResponse): Node[] => {
     return nodes;
 };
 
-// Helper function to convert API relations to React Flow edges
-const convertToEdges = (data: GetNodesResponse): Edge[] => {
-    const edges: Edge[] = [];
-    const seenRelations = new Set<number>();
+// Helper functions for geometric overlap detection
+const getMidpoint = (p1: {x:number, y:number}, p2: {x:number, y:number}) => {
+    return { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+};
 
-    // Process all node types and their relations
+const dist = (p1: {x:number, y:number}, p2: {x:number, y:number}) => {
+    return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+};
+
+// Helper function to convert API relations to React Flow edges
+const convertToEdges = (data: GetNodesResponse, nodes: Node[]): Edge[] => {
+    const edges: Edge[] = [];
+    const processedRelations = new Set<number>();
+
+    // Need map of node positions for clustering
+    const nodePosMap = new Map<string, {x:number, y:number}>();
+    nodes.forEach(n => nodePosMap.set(n.id, n.position));
+
+    // Group edges by layer for coloring
+    const ccEdges: any[] = [];
+    const coEdges: any[] = [];
+    
+    // Preliminary edge collection
     const allNodes = [
-        ...data.course_contents,
-        ...data.course_outcomes,
-        ...data.program_outcomes,
+        ...data.course_contents, 
+        ...data.course_outcomes, 
+        ...data.program_outcomes
     ];
 
     allNodes.forEach((node) => {
-        node.relations.forEach((relation) => {
-            // Skip if we've already created this edge (API returns relations on both ends)
-            if (seenRelations.has(relation.relation_id)) return;
-            seenRelations.add(relation.relation_id);
-            const sourceId = `${getLayerPrefix(relation.node1_id, data)}-${
-                relation.node1_id
-            }`;
-            const targetId = `${getLayerPrefix(relation.node2_id, data)}-${
-                relation.node2_id
-            }`;
-            const sourceLayer = getLayerPrefix(relation.node1_id, data);
-            const edgeColor =
-                sourceLayer === "course_content" ? "#1976d2" : "#388e3c";
+        node.relations.forEach((rel) => {
+            if (processedRelations.has(rel.relation_id)) return;
+            processedRelations.add(rel.relation_id);
 
-            edges.push({
-                id: `e-${relation.relation_id}`,
-                source: sourceId,
-                target: targetId,
-                label: String(relation.weight),
-                animated: true,
-                style: {
-                    stroke: edgeColor,
-                    strokeWidth: 2,
-                },
-                labelStyle: {
-                    fill: edgeColor,
-                    fontWeight: 700,
-                    fontSize: 14,
-                },
-                labelBgStyle: {
-                    fill: "white",
-                    fillOpacity: 0.9,
-                },
-                data: { relationId: relation.relation_id, weight: 3 },
-            });
+            const sourcePrefix = getLayerPrefix(rel.node1_id, data);
+            const targetPrefix = getLayerPrefix(rel.node2_id, data);
+            if (sourcePrefix && targetPrefix) {
+                const srcId = `${sourcePrefix}-${rel.node1_id}`;
+                const tgtId = `${targetPrefix}-${rel.node2_id}`;
+
+                const edgeObj = {
+                    id: `e-${rel.relation_id}`,
+                    source: srcId,
+                    target: tgtId,
+                    weight: rel.weight,
+                    relationId: rel.relation_id
+                };
+                if (sourcePrefix === 'cc') ccEdges.push(edgeObj);
+                else coEdges.push(edgeObj);
+            }
         });
     });
+
+    const processLayer = (layerEdges: any[], colorOffset: number) => {
+        // 1. Assign colors
+        layerEdges.forEach((e, i) => {
+            e.color = DISTINCT_COLORS[(i + colorOffset) % DISTINCT_COLORS.length];
+        });
+
+        // 2. Detect overlaps
+        // Map edge ID -> midpoint
+        const midpoints = new Map<string, {x:number, y:number}>();
+        layerEdges.forEach(e => {
+            const p1 = nodePosMap.get(e.source);
+            const p2 = nodePosMap.get(e.target);
+            if (p1 && p2) {
+                midpoints.set(e.id, getMidpoint(p1, p2));
+            }
+        });
+
+        // Cluster edges
+        const clusters: string[][] = [];
+        const assigned = new Set<string>();
+        const OVERLAP_THRESHOLD = 30; // pixels
+
+        layerEdges.forEach(e => {
+            if (assigned.has(e.id)) return;
+            const mp = midpoints.get(e.id);
+            if (!mp) {
+                clusters.push([e.id]);
+                assigned.add(e.id);
+                return;
+            }
+
+            const cluster = [e.id];
+            assigned.add(e.id);
+
+            // Find overlapping neighbors
+            layerEdges.forEach(other => {
+                if (assigned.has(other.id)) return;
+                const mpOther = midpoints.get(other.id);
+                if (mpOther && dist(mp, mpOther) < OVERLAP_THRESHOLD) {
+                    cluster.push(other.id);
+                    assigned.add(other.id);
+                }
+            });
+            clusters.push(cluster);
+        });
+
+        // Build edges
+        clusters.forEach(cluster => {
+             if (cluster.length === 1) {
+                 const eDef = layerEdges.find(le => le.id === cluster[0]);
+                 edges.push(createEdge(eDef, eDef.color));
+             } else {
+                 // Multiple edges overlap
+                 const leaderId = cluster[0];
+                 
+                 const clusterLabel = cluster.map(id => {
+                    const e = layerEdges.find(le => le.id === id);
+                    return e ? e.weight : '';
+                 }).join(", ");
+
+                 cluster.forEach((edgeId, idx) => {
+                     const eDef = layerEdges.find(le => le.id === edgeId);
+                     const isLeader = idx === 0;
+                     
+                     edges.push({
+                         ...createEdge(eDef, eDef.color),
+                         label: isLeader ? clusterLabel : "", // Only leader shows label
+                         zIndex: isLeader ? 100 : 1, // Leader on top
+                         style: { 
+                             stroke: eDef.color, 
+                             strokeWidth: 2,
+                         },
+                         labelStyle: isLeader ? { 
+                            fill: "black", fontWeight: 900, fontSize: 14 
+                         } : { fill: "transparent" }, // Label style tweak
+                         data: { 
+                             relationId: eDef.relationId, 
+                             weight: eDef.weight,
+                             isGroup: true,
+                             groupMembers: cluster // Store all IDs in group
+                         }
+                     });
+                 });
+             }
+        });
+    };
+
+    const createEdge = (def: any, color: string): Edge => ({
+        id: def.id,
+        source: def.source,
+        target: def.target,
+        label: `${def.weight}`,
+        data: { relationId: def.relationId, weight: def.weight },
+        animated: true,
+        style: {
+            stroke: color,
+            strokeWidth: 2,
+        },
+        labelStyle: {
+            fill: color,
+            fontWeight: 700,
+            fontSize: 14,
+        },
+        labelBgStyle: {
+            fill: "white",
+            fillOpacity: 0.9,
+        },
+    });
+
+    processLayer(ccEdges, 0);
+    processLayer(coEdges, 5); // Offset colors for variety
 
     return edges;
 };
 
 // Helper to get layer prefix from node ID
 const getLayerPrefix = (nodeId: number, data: GetNodesResponse): string => {
-    if (data.course_contents.some((n) => n.id === nodeId))
-        return "course_content";
-    if (data.course_outcomes.some((n) => n.id === nodeId))
-        return "course_outcome";
-    if (data.program_outcomes.some((n) => n.id === nodeId))
-        return "program_outcome";
-    return "unknown";
+    if (data.course_contents.find((n) => n.id === nodeId)) return "cc";
+    if (data.course_outcomes.find((n) => n.id === nodeId)) return "co";
+    if (data.program_outcomes.find((n) => n.id === nodeId)) return "po";
+    return "";
 };
 
 // Helper function to determine node layer
 const getNodeLayer = (
     nodeId: string
 ): "course_content" | "course_outcome" | "program_outcome" | null => {
-    if (nodeId.startsWith("course_content")) return "course_content";
-    if (nodeId.startsWith("course_outcome")) return "course_outcome";
-    if (nodeId.startsWith("program_outcome")) return "program_outcome";
+    if (nodeId.startsWith("cc-")) return "course_content";
+    if (nodeId.startsWith("co-")) return "course_outcome";
+    if (nodeId.startsWith("po-")) return "program_outcome";
     return null;
 };
 
 // Validate connection to maintain bipartite structure
 const isValidConnection = (connection: Connection): boolean => {
-    if (!connection.source || !connection.target) return false;
-
     const sourceLayer = getNodeLayer(connection.source);
     const targetLayer = getNodeLayer(connection.target);
 
-    // Only allow CC -> CO or CO -> PO connections
+    if (!sourceLayer || !targetLayer) return false;
+
+    // Only allow cc -> co or co -> po connections
     if (sourceLayer === "course_content" && targetLayer === "course_outcome")
         return true;
     if (sourceLayer === "course_outcome" && targetLayer === "program_outcome")
@@ -216,255 +382,273 @@ const isValidConnection = (connection: Connection): boolean => {
 };
 
 export default function MainGraph() {
-    const [nodes, setNodes] = useState<Node[]>([]);
-    const [edges, setEdges] = useState<Edge[]>([]);
+    const searchParams = useSearchParams();
+    const courseId = searchParams.get("courseId");
+
+    const [nodes, setNodes, onNodesChange] = useNodesState([] as Node[]);
+    const [edges, setEdges, onEdgesChange] = useEdgesState([] as Edge[]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    // Keep last loaded API data so UI can re-render with student results
+    const lastLoadedDataRef = useRef<GetNodesResponse | null>(null);
+    const [studentResults, setStudentResults] = useState<any | null>(null);
+
     // Weight modal state
     const [weightModalOpen, setWeightModalOpen] = useState(false);
-    const [weightValue, setWeightValue] = useState<number | "">(1);
+    const [weightValue, setWeightValue] = useState<number | "">(3);
     const [modalMode, setModalMode] = useState<"create" | "edit">("create");
     const [pendingConnection, setPendingConnection] =
         useState<Connection | null>(null);
     const [editingEdge, setEditingEdge] = useState<Edge | null>(null);
     const [saving, setSaving] = useState(false);
-    // Node edit/delete modal state
+    const [modalError, setModalError] = useState<string | null>(null);
+
+    // Node edit modal state
     const [nodeEditModalOpen, setNodeEditModalOpen] = useState(false);
-    const [nodeDeleteModalOpen, setNodeDeleteModalOpen] = useState(false);
     const [editingNodeId, setEditingNodeId] = useState<number | null>(null);
     const [editingNodeName, setEditingNodeName] = useState("");
     const [newNodeName, setNewNodeName] = useState("");
-    const [modalError, setModalError] = useState<string | null>(null);
     const NAME_MAX = 60;
-    // Click selection state
-    const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
-    const searchParams = useSearchParams();
-    const courseIdParam = searchParams.get("courseId");
-    const courseId = courseIdParam || null;
-    const { user, loading: authLoading } = useAuth();
-    const router = useRouter();
+    // Node delete modal state
+    const [nodeDeleteModalOpen, setNodeDeleteModalOpen] = useState(false);
 
-    // Redirect if not authenticated
+    // Load graph data whenever courseId changes
     useEffect(() => {
-        if (!authLoading && !user) {
-            router.push("/login");
-        }
-    }, [authLoading, user, router]);
-
-    // Load initial data from API
-    useEffect(() => {
-        if (authLoading || !user) return;
-
-        const loadData = async () => {
+        const loadGraph = async () => {
             setLoading(true);
+            setError(null);
             try {
-                // If no course selected and user is lecturer, default to first course
-                let targetCourseId = courseId;
-                if (
-                    !targetCourseId &&
-                    user?.role === "lecturer" &&
-                    user &&
-                    user.courseIds &&
-                    user.courseIds.length > 0
-                ) {
-                    targetCourseId = user.courseIds[0];
-                }
+                const data = await getNodes(courseId || undefined);
+                // Keep last loaded data for future re-render with student results
+                lastLoadedDataRef.current = data;
 
-                // If still no course ID and user is lecturer, show message
-                if (!targetCourseId && user?.role === "lecturer") {
-                    console.warn(
-                        "No course selected and user has no courses assigned"
+                // Initial render without student-specific values (we'll fetch them next)
+                const newNodes = convertToNodes(data, studentResults);
+                const newEdges = convertToEdges(data, newNodes);
+
+                setNodes(newNodes);
+                setEdges(newEdges);
+
+                // Determine studentId: prefer localStorage, fallback to a hardcoded temporary id
+                const studentId =
+                    typeof localStorage !== "undefined"
+                        ? localStorage.getItem("selectedStudentId") ||
+                          "221401005"
+                        : "221401005";
+
+                try {
+                    const sr = await calculateStudentResults(
+                        studentId,
+                        courseId || undefined
                     );
-                    setLoading(false);
-                    return;
-                }
-
-                const data = await getNodes(targetCourseId || undefined);
-                setNodes(convertToNodes(data));
-                setEdges(convertToEdges(data));
-            } catch (error) {
-                console.error("Failed to load graph data:", error);
-                // Don't show alert for 404 errors when no course is selected
-                if (error instanceof Error && !error.message.includes("404")) {
-                    alert(`Failed to load graph data: ${error.message}`);
-                }
-            } finally {
-                setLoading(false);
+                    setStudentResults(sr);
+                    // Rebuild nodes with student results applied
+                    const nodesWithStudent = convertToNodes(data, sr);
+                    setNodes(nodesWithStudent);
+                // Rebuild edges with nodes (for positions)
+                setEdges(convertToEdges(data, nodesWithStudent));
+            } catch (err) {
+                // If student results fetch fails, log but keep showing the base graph
+                console.error("Failed to fetch student results:", err);
             }
-        };
+        } catch (err) {
+            setError("Failed to load graph data");
+            console.error("Error loading graph:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
 
-        loadData();
-    }, [user, courseId, authLoading]);
+    loadGraph();
 
-    useEffect(() => {
-        // Listen for new node event from header modal
-        const handler = (e: Event) => {
-            const detail = (e as CustomEvent).detail as
-                | {
-                      id: number;
-                      name: string;
-                      type:
-                          | "course_content"
-                          | "course_outcome"
-                          | "program_outcome";
-                  }
-                | undefined;
-            if (!detail) return;
-            setNodes((prev) => {
-                const y =
-                    80 +
-                    prev.filter((n) => n.id.startsWith(detail.type)).length *
-                        100;
-                const xMap = {
-                    course_content: 50,
-                    course_outcome: 400,
-                    program_outcome: 750,
-                } as const;
-                const colorMap = {
-                    course_content: {
-                        bg: "#e3f2fd",
-                        border: "#1976d2",
-                        width: 180,
-                    },
-                    course_outcome: {
-                        bg: "#f3e5f5",
-                        border: "#7b1fa2",
-                        width: 180,
-                    },
-                    program_outcome: {
-                        bg: "#e8f5e9",
-                        border: "#388e3c",
-                        width: 200,
-                    },
-                } as const;
-                const c = colorMap[detail.type];
-                const posX = xMap[detail.type];
-                const sourcePosition =
-                    detail.type === "course_content"
-                        ? Position.Right
-                        : detail.type === "course_outcome"
-                        ? Position.Right
-                        : Position.Left;
-                const targetPosition =
-                    detail.type === "course_content"
-                        ? Position.Right
-                        : Position.Left;
-                const newNode: Node = {
-                    id: `${detail.type}-${detail.id}`,
-                    position: { x: posX, y },
-                    data: { label: detail.name, apiId: detail.id },
-                    type: "graphnode",
-                    draggable: false,
-                    sourcePosition,
-                    targetPosition,
-                    style: {
-                        background: c.bg,
-                        border: `2px solid ${c.border}`,
-                        borderRadius: "8px",
-                        padding: "10px",
-                        fontSize: "12px",
-                        width: c.width,
-                    },
-                };
-                return [...prev, newNode];
-            });
-        };
-        window.addEventListener("giraph:new-node", handler as EventListener);
-        return () => {
-            window.removeEventListener(
-                "giraph:new-node",
-                handler as EventListener
-            );
-        };
-    }, []);
+    // Listen for external events and reload or update
+    const onScoresUpdated = () => loadGraph();
+    const onStudentResultsUpdated = async (e: Event) => {
+        const detail = (e as CustomEvent).detail;
+        setStudentResults(detail);
 
-    const onNodesChange = useCallback((changes: NodeChange[]) => {
-        // Filter out position changes to prevent node movement
-        const filteredChanges = changes.filter(
-            (change) => change.type !== "position"
-        );
-        setNodes((nodesSnapshot) =>
-            applyNodeChanges(filteredChanges, nodesSnapshot)
-        );
-    }, []);
-
-    const onEdgesChange = useCallback(
-        (changes: EdgeChange[]) => {
-            // Handle edge deletions by calling API
-            changes.forEach((change) => {
-                if (change.type === "remove") {
-                    const edge = edges.find((e) => e.id === change.id);
-                    if (edge?.data?.relationId) {
-                        const relationId = edge.data.relationId as number;
-                        deleteRelation(relationId)
-                            .then(() => {
-                                console.log(`Relation ${relationId} deleted`);
-                            })
-                            .catch((error) => {
-                                console.error(
-                                    `Failed to delete relation: ${error.message}`
-                                );
-                                alert(
-                                    `Failed to delete relation: ${error.message}`
-                                );
-                            });
-                    }
-                }
-            });
-
-            setEdges((edgesSnapshot) =>
-                applyEdgeChanges(changes, edgesSnapshot)
-            );
-        },
-        [edges]
-    );
-
-    const onConnect = useCallback(
-        (params: Connection) => {
-            // Only add edge if it maintains bipartite structure
-            if (isValidConnection(params)) {
-                // Prevent duplicate edges between same source and target
-                if (
-                    edges.some(
-                        (e) =>
-                            e.source === params.source &&
-                            e.target === params.target
-                    )
-                ) {
-                    // Silently ignore duplicates
-                    return;
-                }
-                setModalMode("create");
-                setPendingConnection(params);
-                setWeightValue(1);
-                setWeightModalOpen(true);
+        // Re-render nodes to include student values. If we don't have last loaded data,
+        // fetch nodes first, otherwise reuse cached data.
+        try {
+            let data = lastLoadedDataRef.current;
+            if (!data) {
+                data = await getNodes(courseId || undefined);
+                lastLoadedDataRef.current = data;
             }
-        },
-        [nodes, edges]
+            const newNodes = convertToNodes(data, detail);
+            setNodes(newNodes);
+            // Rebuild edges to ensure positions and overlays are consistent
+            setEdges(convertToEdges(data, newNodes));
+        } catch (err) {
+            console.error("Failed to apply student results to nodes", err);
+        }
+    };
+
+    window.addEventListener("scoresUpdated", onScoresUpdated);
+    window.addEventListener(
+        "studentResultsUpdated",
+        onStudentResultsUpdated as EventListener
     );
-
-    const onEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
-        // Open modal to edit existing weight
-        setModalMode("edit");
-        setEditingEdge(edge);
-        const currentWeight = (edge.data as { weight?: number })?.weight;
-        const parsed =
-            typeof currentWeight === "number"
-                ? currentWeight
-                : parseInt((edge.label as string) || "", 10);
-        setWeightValue(
-            Number.isFinite(parsed) && parsed >= 1 && parsed <= 5 ? parsed : 1
+    return () => {
+        window.removeEventListener("scoresUpdated", onScoresUpdated);
+        window.removeEventListener(
+            "studentResultsUpdated",
+            onStudentResultsUpdated as EventListener
         );
-        setWeightModalOpen(true);
-    }, []);
+    };
+}, [courseId, setNodes, setEdges]);
 
-    const closeModal = () => {
+    // Close weight modal
+    const closeWeightModal = () => {
         setWeightModalOpen(false);
         setPendingConnection(null);
         setEditingEdge(null);
         setSaving(false);
+        setModalError(null);
     };
 
+    // Handle new connection - open modal instead of prompt
+    const onConnect = useCallback(
+        (connection: Connection) => {
+            if (!isValidConnection(connection)) {
+                setModalError(
+                    "Only course content → course outcome or course outcome → program outcome connections are allowed."
+                );
+                return;
+            }
+
+            // Check for duplicate
+            if (
+                edges.some(
+                    (e) =>
+                        e.source === connection.source &&
+                        e.target === connection.target
+                )
+            ) {
+                return;
+            }
+
+            setModalMode("create");
+            setPendingConnection(connection);
+            setWeightValue(3);
+            setModalError(null);
+            setWeightModalOpen(true);
+        },
+        [edges]
+    );
+
+    // Handle edge click - open modal to edit
+    const onEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
+        // Handle grouped edges
+        if (edge.data?.isGroup && Array.isArray(edge.data.groupMembers) && edge.data.groupMembers.length > 0) {
+            setGroupedEdgesList(edge.data.groupMembers as string[]);
+            setGroupModalOpen(true);
+            return;
+        }
+
+        setModalMode("edit");
+        setEditingEdge(edge);
+        const currentWeight = (edge.data as { weight?: number })?.weight;
+        setWeightValue(typeof currentWeight === "number" ? currentWeight : 3);
+        setModalError(null);
+        setWeightModalOpen(true);
+    }, []);
+
+    // Group Modal State
+    const [groupModalOpen, setGroupModalOpen] = useState(false);
+    const [groupedEdgesList, setGroupedEdgesList] = useState<string[]>([]);
+
+
+    // Submit weight (create or edit)
+    const submitWeight = async () => {
+        setModalError(null);
+        if (weightValue === "" || weightValue < 1 || weightValue > 5) {
+            setModalError("Weight must be between 1 and 5");
+            return;
+        }
+
+        setSaving(true);
+        try {
+            if (modalMode === "create" && pendingConnection) {
+                const sourceId = parseInt(
+                    pendingConnection.source.split("-")[1]
+                );
+                const targetId = parseInt(
+                    pendingConnection.target.split("-")[1]
+                );
+
+                const response = await createRelation(
+                    sourceId,
+                    targetId,
+                    weightValue
+                );
+
+                const sourceLayer = getNodeLayer(pendingConnection.source);
+                const edgeColor =
+                    sourceLayer === "course_content" ? "#1976d2" : "#388e3c";
+
+                const newEdge: Edge = {
+                    id: `e-${response.relation_id}`,
+                    source: pendingConnection.source,
+                    target: pendingConnection.target,
+                    label: `${weightValue}`,
+                    data: {
+                        relationId: response.relation_id,
+                        weight: weightValue,
+                    },
+                    animated: true,
+                    style: {
+                        stroke: edgeColor,
+                        strokeWidth: 2,
+                    },
+                    labelStyle: {
+                        fill: edgeColor,
+                        fontWeight: 700,
+                        fontSize: 14,
+                    },
+                    labelBgStyle: {
+                        fill: "white",
+                        fillOpacity: 0.9,
+                    },
+                };
+
+                setEdges((eds) => addEdge(newEdge, eds));
+                closeWeightModal();
+            } else if (modalMode === "edit" && editingEdge) {
+                const relationId = (editingEdge.data as { relationId?: number })
+                    ?.relationId;
+                if (!relationId) {
+                    setModalError("Missing relation ID");
+                    return;
+                }
+
+                await updateRelation(relationId, weightValue);
+
+                setEdges((prev) =>
+                    prev.map((e) =>
+                        e.id === editingEdge.id
+                            ? {
+                                  ...e,
+                                  label: `${weightValue}`,
+                                  data: { ...e.data, weight: weightValue },
+                              }
+                            : e
+                    )
+                );
+
+                closeWeightModal();
+            }
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : "Unknown error";
+            setModalError(`Failed: ${msg}`);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    // Delete current edge
     const deleteCurrentEdge = async () => {
         if (!editingEdge) return;
 
@@ -472,7 +656,7 @@ export default function MainGraph() {
             ?.relationId;
         if (!relationId) {
             setEdges((prev) => prev.filter((e) => e.id !== editingEdge.id));
-            closeModal();
+            closeWeightModal();
             return;
         }
 
@@ -480,186 +664,29 @@ export default function MainGraph() {
         try {
             await deleteRelation(relationId);
             setEdges((prev) => prev.filter((e) => e.id !== editingEdge.id));
-            closeModal();
-        } catch (error) {
-            console.error("Failed to delete relation:", error);
-            setModalError("Failed to delete relation");
+            closeWeightModal();
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : "Unknown error";
+            setModalError(`Failed to delete: ${msg}`);
         } finally {
             setSaving(false);
         }
     };
 
-    const submitWeight = async () => {
-        setModalError(null);
-        if (weightValue === "" || weightValue < 1 || weightValue > 5) {
-            setModalError("Weight must be between 1 and 5");
-            return;
-        }
-        try {
-            setSaving(true);
-            if (modalMode === "create" && pendingConnection) {
-                const params = pendingConnection;
-                // Double-check duplicates before creating, to avoid race conditions
-                if (
-                    params.source &&
-                    params.target &&
-                    edges.some(
-                        (e) =>
-                            e.source === params.source &&
-                            e.target === params.target
-                    )
-                ) {
-                    // Silently close modal on duplicate to avoid user-facing messages
-                    setSaving(false);
-                    closeModal();
-                    return;
-                }
-                const sourceNode = nodes.find((n) => n.id === params.source);
-                const targetNode = nodes.find((n) => n.id === params.target);
-                if (!sourceNode || !targetNode) {
-                    alert("Invalid nodes selected");
-                    return;
-                }
-                const node1_id = sourceNode.data.apiId as number;
-                const node2_id = targetNode.data.apiId as number;
-
-                const response = await createRelation(
-                    node1_id,
-                    node2_id,
-                    weightValue
-                );
-                const sourceLayer = getNodeLayer(params.source!);
-                const edgeColor =
-                    sourceLayer === "course_content" ? "#1976d2" : "#388e3c";
-                setEdges((edgesSnapshot) =>
-                    addEdge(
-                        {
-                            ...params,
-                            id: `e-${response.relation_id}`,
-                            label: String(weightValue),
-                            animated: true,
-                            style: {
-                                stroke: edgeColor,
-                                strokeWidth: 2,
-                            },
-                            labelStyle: {
-                                fill: edgeColor,
-                                fontWeight: 700,
-                                fontSize: 14,
-                            },
-                            labelBgStyle: {
-                                fill: "white",
-                                fillOpacity: 0.9,
-                            },
-                            data: {
-                                relationId: response.relation_id,
-                                weight: weightValue,
-                            },
-                        },
-                        edgesSnapshot
-                    )
-                );
-                closeModal();
-            } else if (modalMode === "edit" && editingEdge) {
-                const relationId = (editingEdge.data as { relationId?: number })
-                    ?.relationId;
-                if (!relationId) {
-                    setModalError("Missing relation id");
-                    return;
-                }
-                // Optimistic UI update
-                setEdges((prev) =>
-                    prev.map((e) =>
-                        e.id === editingEdge.id
-                            ? {
-                                  ...e,
-                                  label: String(weightValue),
-                                  data: {
-                                      ...(e.data || {}),
-                                      weight: weightValue,
-                                  },
-                              }
-                            : e
-                    )
-                );
-                try {
-                    await updateRelation(relationId, weightValue);
-                } catch (err: unknown) {
-                    // Revert on error
-                    setEdges((prev) =>
-                        prev.map((e) =>
-                            e.id === editingEdge.id
-                                ? {
-                                      ...e,
-                                      label: String(
-                                          (
-                                              editingEdge.data as {
-                                                  weight?: number;
-                                              }
-                                          )?.weight ?? editingEdge.label
-                                      ),
-                                      data: {
-                                          ...(e.data || {}),
-                                          weight: (
-                                              editingEdge.data as {
-                                                  weight?: number;
-                                              }
-                                          )?.weight,
-                                      },
-                                  }
-                                : e
-                        )
-                    );
-                    const msg =
-                        err instanceof Error ? err.message : "Unknown error";
-                    setModalError(`Failed to update relation: ${msg}`);
-                    setSaving(false);
-                    return;
-                }
-                closeModal();
-            }
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    // Handlers for node edit/delete from GraphNode
-    const handleNodeEdit = (apiId: number, currentName: string) => {
-        // RBAC Check: Lecturers cannot edit Program Outcomes
-        const node = nodes.find(
-            (n) => (n.data as { apiId: number }).apiId === apiId
-        );
-        if (node?.id.startsWith("program_outcome") && user?.role !== "head") {
-            alert("Only Department Head can edit Program Outcomes");
-            return;
-        }
-
+    // Handle node edit - open modal
+    const handleEditNode = useCallback((apiId: number, currentName: string) => {
         setEditingNodeId(apiId);
         setEditingNodeName(currentName);
         setNewNodeName(currentName);
         setModalError(null);
         setNodeEditModalOpen(true);
-    };
+    }, []);
 
-    const handleNodeDelete = (apiId: number, currentName: string) => {
-        // RBAC Check: Lecturers cannot delete Program Outcomes
-        const node = nodes.find(
-            (n) => (n.data as { apiId: number }).apiId === apiId
-        );
-        if (node?.id.startsWith("program_outcome") && user?.role !== "head") {
-            alert("Only Department Head can delete Program Outcomes");
-            return;
-        }
-
-        setEditingNodeId(apiId);
-        setEditingNodeName(currentName);
-        setModalError(null);
-        setNodeDeleteModalOpen(true);
-    };
-
+    // Submit node rename
     const submitNodeRename = async () => {
         if (!editingNodeId) return;
         setModalError(null);
+
         const trimmed = newNodeName.trim();
         if (!trimmed) {
             setModalError("Name cannot be empty");
@@ -669,244 +696,182 @@ export default function MainGraph() {
             setModalError(`Name must be at most ${NAME_MAX} characters`);
             return;
         }
+
         setSaving(true);
-        // Optimistic update of nodes list
-        const prevNodes = nodes;
-        setNodes((prev) =>
-            prev.map((n) =>
-                (n.data as { apiId: number }).apiId === editingNodeId
-                    ? { ...n, data: { ...n.data, label: trimmed } }
-                    : n
-            )
-        );
         try {
-            // Mock call (not yet implemented server side) - updateNode
-            const { updateNode } = await import("./apiClient");
-            await updateNode(editingNodeId, trimmed);
+            await apiUpdateNode(editingNodeId, trimmed);
+            setNodes((nds) =>
+                nds.map((node) => {
+                    if (node.data?.apiId === editingNodeId) {
+                        return {
+                            ...node,
+                            data: { ...node.data, label: trimmed },
+                        } as Node;
+                    }
+                    return node;
+                })
+            );
             setNodeEditModalOpen(false);
-        } catch (e: unknown) {
-            // Revert
-            setNodes(prevNodes);
-            const msg = e instanceof Error ? e.message : "Unknown error";
-            setModalError(`Failed to rename node: ${msg}`);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : "Unknown error";
+            setModalError(`Failed to rename: ${msg}`);
         } finally {
             setSaving(false);
         }
     };
 
+    // Helper to open edit for a specific edge from the group list
+    const editGroupedEdge = useCallback((edgeId: string) => {
+         const edge = edges.find(e => e.id === edgeId);
+         if (edge) {
+             setGroupModalOpen(false);
+             setModalMode("edit");
+             setEditingEdge(edge);
+             const currentWeight = (edge.data as { weight?: number })?.weight;
+             setWeightValue(typeof currentWeight === "number" ? currentWeight : 3);
+             setModalError(null);
+             setWeightModalOpen(true);
+         }
+    }, [edges]);
+
+    const getGroupedEdgeInfo = (edgeId: string) => {
+        const edge = edges.find(e => e.id === edgeId);
+        if (!edge) return { source: "Unknown", target: "Unknown", weight: 0, color: '#000' };
+        
+        // Find source and target node names
+        const sourceNode = nodes.find(n => n.id === edge.source);
+        const targetNode = nodes.find(n => n.id === edge.target);
+        
+        return {
+            source: String(sourceNode?.data.label || "Unknown"),
+            target: String(targetNode?.data.label || "Unknown"),
+            weight: Number((edge.data as any)?.weight || 0),
+            color: (edge.style?.stroke as string) || '#000'
+        };
+    };
+
+    // Handle node delete - open modal
+    const handleDeleteNode = useCallback(
+        (apiId: number, currentName: string) => {
+            setEditingNodeId(apiId);
+            setEditingNodeName(currentName);
+            setModalError(null);
+            setNodeDeleteModalOpen(true);
+        },
+        []
+    );
+
+    // Submit node delete
     const submitNodeDelete = async () => {
         if (!editingNodeId) return;
         setModalError(null);
+
         setSaving(true);
-        const prevNodes = nodes;
-        const prevEdges = edges;
-        // Optimistically remove node and any edges referencing it
-        setNodes((prev) =>
-            prev.filter(
-                (n) => (n.data as { apiId: number }).apiId !== editingNodeId
-            )
-        );
-        setEdges((prev) =>
-            prev.filter(
-                (e) =>
-                    (
-                        nodes.find((n) => n.id === e.source)?.data as {
-                            apiId: number;
-                        }
-                    )?.apiId !== editingNodeId &&
-                    (
-                        nodes.find((n) => n.id === e.target)?.data as {
-                            apiId: number;
-                        }
-                    )?.apiId !== editingNodeId
-            )
-        );
         try {
-            const { deleteNode } = await import("./apiClient");
-            await deleteNode(editingNodeId);
+            await apiDeleteNode(editingNodeId);
+            setNodes((nds) =>
+                nds.filter((n) => n.data.apiId !== editingNodeId)
+            );
+            setEdges((eds) =>
+                eds.filter(
+                    (e) =>
+                        !e.source.includes(`-${editingNodeId}`) &&
+                        !e.target.includes(`-${editingNodeId}`)
+                )
+            );
             setNodeDeleteModalOpen(false);
-        } catch (e: unknown) {
-            // Revert
-            setNodes(prevNodes);
-            setEdges(prevEdges);
-            const msg = e instanceof Error ? e.message : "Unknown error";
-            setModalError(`Failed to delete node: ${msg}`);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : "Unknown error";
+            setModalError(`Failed to delete: ${msg}`);
         } finally {
             setSaving(false);
         }
     };
 
-    // Derive styled nodes/edges based on selection
-    const { displayNodes, displayEdges } = useMemo(() => {
-        if (!selectedNodeId)
-            return { displayNodes: nodes, displayEdges: edges };
+    const nodeTypes = useMemo(
+        () => createNodeTypes(handleEditNode, handleDeleteNode),
+        [handleEditNode, handleDeleteNode]
+    );
 
-        const selectedLayer = getNodeLayer(selectedNodeId);
-        const connectedEdgeIds = new Set<string>();
-        const connectedNodeIds = new Set<string>([selectedNodeId]);
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-full">
+                <p>Loading graph...</p>
+            </div>
+        );
+    }
 
-        // Build quick lookups
-        const bySource = new Map<string, Edge[]>();
-        const byTarget = new Map<string, Edge[]>();
-        for (const e of edges) {
-            if (!bySource.has(e.source)) bySource.set(e.source, []);
-            if (!byTarget.has(e.target)) byTarget.set(e.target, []);
-            bySource.get(e.source)!.push(e);
-            byTarget.get(e.target)!.push(e);
-        }
-
-        if (selectedLayer === "course_content") {
-            // cc -> co
-            const toCo = bySource.get(selectedNodeId) || [];
-            const coIds: string[] = [];
-            for (const e of toCo) {
-                connectedEdgeIds.add(e.id);
-                connectedNodeIds.add(e.target);
-                coIds.push(e.target);
-            }
-            // co -> po
-            for (const coId of coIds) {
-                const toPo = bySource.get(coId) || [];
-                for (const e of toPo) {
-                    connectedEdgeIds.add(e.id);
-                    connectedNodeIds.add(e.target);
-                }
-            }
-        } else if (selectedLayer === "course_outcome") {
-            // co -> po
-            const toPo = bySource.get(selectedNodeId) || [];
-            for (const e of toPo) {
-                connectedEdgeIds.add(e.id);
-                connectedNodeIds.add(e.target);
-            }
-            // cc -> co (incoming)
-            const fromCc = byTarget.get(selectedNodeId) || [];
-            for (const e of fromCc) {
-                connectedEdgeIds.add(e.id);
-                connectedNodeIds.add(e.source);
-            }
-        } else if (selectedLayer === "program_outcome") {
-            // co -> po (incoming)
-            const fromCo = byTarget.get(selectedNodeId) || [];
-            const coIds: string[] = [];
-            for (const e of fromCo) {
-                connectedEdgeIds.add(e.id);
-                connectedNodeIds.add(e.source);
-                coIds.push(e.source);
-            }
-            // cc -> co (incoming to those co)
-            for (const coId of coIds) {
-                const fromCc = byTarget.get(coId) || [];
-                for (const e of fromCc) {
-                    connectedEdgeIds.add(e.id);
-                    connectedNodeIds.add(e.source);
-                }
-            }
-        }
-
-        const fadedOpacity = 0.25;
-
-        const displayNodes = nodes.map((n) => {
-            const isConnected = connectedNodeIds.has(n.id);
-            const isSelected = n.id === selectedNodeId;
-            return {
-                ...n,
-                style: {
-                    ...(n.style || {}),
-                    opacity: isConnected ? 1 : fadedOpacity,
-                    transition:
-                        "opacity 200ms ease, box-shadow 200ms ease, border-color 200ms ease",
-                    boxShadow: isSelected
-                        ? "0 0 0 4px rgba(255,165,0,0.4)"
-                        : (n.style as React.CSSProperties)?.boxShadow,
-                    border: isSelected
-                        ? "2px solid #ff9800"
-                        : (n.style as React.CSSProperties)?.border,
-                },
-            } as Node;
-        });
-
-        const displayEdges = edges.map((e) => {
-            const isConnected = connectedEdgeIds.has(e.id);
-            return {
-                ...e,
-                style: {
-                    ...(e.style || {}),
-                    opacity: isConnected ? 1 : fadedOpacity,
-                    transition: "opacity 200ms ease",
-                },
-                labelStyle: {
-                    ...(e.labelStyle || {}),
-                    opacity: isConnected ? 1 : fadedOpacity,
-                    transition: "opacity 200ms ease",
-                },
-            } as Edge;
-        });
-
-        return { displayNodes, displayEdges };
-    }, [nodes, edges, selectedNodeId]);
+    if (error) {
+        return (
+            <div className="flex items-center justify-center h-full">
+                <p className="text-red-500">{error}</p>
+            </div>
+        );
+    }
 
     return (
-        <div
-            style={{
-                width: "100vw",
-                height: "100vh",
-                position: "absolute",
-                top: 0,
-                left: 0,
-            }}
-            className="bg-neutral-50"
-        >
-            {loading ? (
-                <div
-                    style={{
-                        display: "flex",
-                        justifyContent: "center",
-                        alignItems: "center",
-                        height: "100%",
-                    }}
-                >
-                    Loading graph data...
+        <>
+            <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                onEdgeClick={onEdgeClick}
+                nodeTypes={nodeTypes}
+                proOptions={{ hideAttribution: true }}
+                fitView
+                fitViewOptions={{ padding: 0.2 }}
+            >
+                <Background />
+                <Controls />
+            </ReactFlow>
+
+            {/* Weight Modal */}
+            <Modal
+                opened={groupModalOpen}
+                onClose={() => setGroupModalOpen(false)}
+                title="Overlapping Edges"
+                centered
+                size="md"
+            >
+                <Text size="sm" mb="md" c="dimmed">
+                    Select an edge to edit its weight:
+                </Text>
+                <div className="space-y-2">
+                    {groupedEdgesList.map(edgeId => {
+                        const info = getGroupedEdgeInfo(edgeId);
+                        return (
+                            <div 
+                                key={edgeId} 
+                                className={`p-3 border rounded-md cursor-pointer hover:bg-gray-50 flex justify-between items-center`}
+                                style={{ borderLeft: `4px solid ${info.color}` }}
+                                onClick={() => editGroupedEdge(edgeId)}
+                            >
+                                <div>
+                                    <div className="text-sm font-semibold">{info.source} → {info.target}</div>
+                                </div>
+                                <div className="font-bold bg-gray-200 px-2 py-1 rounded text-xs">
+                                    Weight: {info.weight}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
-            ) : (
-                <ReactFlow
-                    nodes={displayNodes}
-                    edges={displayEdges}
-                    onNodesChange={onNodesChange}
-                    onEdgesChange={onEdgesChange}
-                    nodeTypes={createNodeTypes(
-                        handleNodeEdit,
-                        handleNodeDelete
-                    )}
-                    onConnect={onConnect}
-                    onEdgeClick={onEdgeClick}
-                    onNodeClick={(_, n) =>
-                        setSelectedNodeId((prev) =>
-                            prev === n.id ? null : n.id
-                        )
-                    }
-                    onPaneClick={() => setSelectedNodeId(null)}
-                    nodesDraggable={false}
-                    elementsSelectable={true}
-                    panOnScroll={false}
-                    zoomOnPinch={false}
-                    zoomOnDoubleClick={false}
-                    preventScrolling={true}
-                    proOptions={{ hideAttribution: true }}
-                    fitView
-                >
-                    <Background />
-                    <Controls />
-                    <MiniMap />
-                </ReactFlow>
-            )}
+                <Group justify="flex-end" mt="md">
+                    <Button variant="default" onClick={() => setGroupModalOpen(false)}>
+                        Close
+                    </Button>
+                </Group>
+            </Modal>
+
             <Modal
                 opened={weightModalOpen}
-                onClose={closeModal}
+                onClose={closeWeightModal}
                 title={
                     modalMode === "create"
-                        ? "Set edge weight"
-                        : "Edit edge weight"
+                        ? "Set Relationship Weight"
+                        : "Edit Relationship Weight"
                 }
                 centered
             >
@@ -928,9 +893,6 @@ export default function MainGraph() {
                         onChange={(val) => {
                             if (val === "" || typeof val === "number") {
                                 setWeightValue(val);
-                            } else {
-                                const n = parseInt(String(val), 10);
-                                setWeightValue(Number.isFinite(n) ? n : "");
                             }
                         }}
                         data-autofocus
@@ -938,7 +900,7 @@ export default function MainGraph() {
                     <Group justify="flex-end" mt="md">
                         <Button
                             variant="default"
-                            onClick={closeModal}
+                            onClick={closeWeightModal}
                             disabled={saving}
                         >
                             Cancel
@@ -953,16 +915,18 @@ export default function MainGraph() {
                                 Delete
                             </Button>
                         )}
-                        <Button onClick={submitWeight} loading={saving}>
+                        <Button onClick={submitWeight}>
                             {modalMode === "create" ? "Create" : "Save"}
                         </Button>
                     </Group>
                 </div>
             </Modal>
+
+            {/* Node Edit Modal */}
             <Modal
                 opened={nodeEditModalOpen}
                 onClose={() => setNodeEditModalOpen(false)}
-                title="Rename node"
+                title="Rename Node"
                 centered
             >
                 <div className="space-y-4">
@@ -982,10 +946,9 @@ export default function MainGraph() {
                         placeholder="New name"
                         autoFocus
                         rightSection={
-                            <Text
-                                size="xs"
-                                c="dimmed"
-                            >{`${newNodeName.length}/${NAME_MAX}`}</Text>
+                            <Text size="xs" c="dimmed">
+                                {newNodeName.length}/{NAME_MAX}
+                            </Text>
                         }
                     />
                     <Group justify="flex-end" mt="md">
@@ -996,16 +959,18 @@ export default function MainGraph() {
                         >
                             Cancel
                         </Button>
-                        <Button onClick={submitNodeRename} loading={saving}>
+                        <Button onClick={submitNodeRename}>
                             Save
                         </Button>
                     </Group>
                 </div>
             </Modal>
+
+            {/* Node Delete Modal */}
             <Modal
                 opened={nodeDeleteModalOpen}
                 onClose={() => setNodeDeleteModalOpen(false)}
-                title="Delete node"
+                title="Delete Node"
                 centered
             >
                 <div className="space-y-4">
@@ -1016,7 +981,7 @@ export default function MainGraph() {
                     )}
                     <Text>
                         Are you sure you want to delete &quot;{editingNodeName}
-                        &quot;? This will remove related edges.
+                        &quot;? This will remove all related connections.
                     </Text>
                     <Group justify="flex-end" mt="md">
                         <Button
@@ -1029,13 +994,12 @@ export default function MainGraph() {
                         <Button
                             color="red"
                             onClick={submitNodeDelete}
-                            loading={saving}
                         >
                             Delete
                         </Button>
                     </Group>
                 </div>
             </Modal>
-        </div>
+        </>
     );
 }

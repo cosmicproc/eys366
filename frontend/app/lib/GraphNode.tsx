@@ -8,6 +8,7 @@ export default function GraphNode(props: {
     data: {
         label: string;
         apiId: number;
+        score?: number;
     };
     sourcePosition?: Position;
     targetPosition?: Position;
@@ -15,34 +16,41 @@ export default function GraphNode(props: {
     onDelete?: (apiId: number, currentName: string) => void;
 }) {
     return (
-        <div className="text-center">
-            <div>{props.data.label}</div>
-            <div className="flex justify-center">
+        <div>
+            {props.targetPosition && (
+                <Handle type="target" position={props.targetPosition} />
+            )}
+            <div className="font-medium mb-1 text-center">{props.data.label}</div>
+            
+            {(props.data.score !== undefined && props.data.score !== null) && (
+                <div className="text-xs text-center text-gray-600 mb-2 font-semibold">
+                    Score: {Math.round(props.data.score)}%
+                </div>
+            )}
+
+            <div className="flex gap-1 justify-center">
                 <ActionIcon
                     variant="subtle"
                     aria-label="Edit"
-                    size="1em"
+                    size="sm"
                     onClick={() =>
                         props.onEdit?.(props.data.apiId, props.data.label)
                     }
                 >
-                    <IconEdit />
+                    <IconEdit size={16} />
                 </ActionIcon>
                 <ActionIcon
                     variant="subtle"
                     aria-label="Delete"
-                    size="1em"
+                    size="sm"
                     color="red"
                     onClick={() =>
                         props.onDelete?.(props.data.apiId, props.data.label)
                     }
                 >
-                    <IconBackspace />
+                    <IconBackspace size={16} />
                 </ActionIcon>
             </div>
-            {props.targetPosition && (
-                <Handle type="target" position={props.targetPosition} />
-            )}
             {props.sourcePosition && (
                 <Handle type="source" position={props.sourcePosition} />
             )}

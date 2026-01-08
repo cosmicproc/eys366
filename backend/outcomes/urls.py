@@ -1,11 +1,8 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from .views import ProgramOutcomeViewSet, LearningOutcomeViewSet
-
-router = DefaultRouter()
-router.register(r"program-outcomes", ProgramOutcomeViewSet, basename="programoutcome")
-router.register(r"learning-outcomes", LearningOutcomeViewSet, basename="learningoutcome")
+from django.urls import path
+from . import views
 
 urlpatterns = [
-    path("", include(router.urls)),
+    path('upload/', views.upload_grades, name='upload_grades'),
+    # API-friendly route used by the frontend
+    path('upload_grades/', views.upload_grades, name='upload_grades_api'),
 ]

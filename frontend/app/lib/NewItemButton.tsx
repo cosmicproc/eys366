@@ -93,6 +93,7 @@ export default function NewItemButton() {
                 variant="subtle"
                 onClick={() => setOpen(true)}
                 disabled={!courseId}
+                radius="lg"
                 title={
                     !courseId ? "Please select a course first" : "Add new item"
                 }

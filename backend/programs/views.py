@@ -1,6 +1,6 @@
 from rest_framework import status
-from rest_framework.decorators import api_view
-from rest_framework.permissions import AllowAny
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from users.models import User
@@ -11,42 +11,98 @@ from .serializers import ProgramSerializer
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def program_info(request):
     """
-    GET /api/program/program-info
-    Returns all lecturers in the system
+    GET /api/programs/program-info/
+    Returns all users who can be assigned to courses (lecturers and heads)
     """
-    lecturers = User.objects.filter(role="lecturer")
+    lecturers = User.objects.filter(role__in=["lecturer", "head", "department_head"])
     serializer = UserSerializer(lecturers, many=True)
     return Response({"lecturers": serializer.data}, status=status.HTTP_200_OK)
 
 
+@api_view(["GET", "PUT"])
+@permission_classes([IsAuthenticated])
+def program_settings(request):
+    """
+    GET/PUT /api/programs/settings/
+    Get or update program settings (university, department info)
+    """
+    # Get the first department head user for program info
+    head = User.objects.filter(role__in=["head", "department_head"]).first()
+    
+    if not head:
+        # Create default settings if no head exists
+        if request.method == "GET":
+            return Response({
+                "university": "",
+                "department": "",
+            }, status=status.HTTP_200_OK)
+    
+    if request.method == "GET":
+        return Response({
+            "university": head.university if head else "",
+            "department": head.department if head else "",
+        }, status=status.HTTP_200_OK)
+    
+    elif request.method == "PUT":
+        # Only department heads can update settings
+        if request.user.role not in ["head", "department_head"]:
+            return Response(
+                {"detail": "Only department heads can update settings"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        university = request.data.get("university", "")
+        department = request.data.get("department", "")
+        
+        # Update the head's info
+        if head:
+            head.university = university
+            head.department = department
+            head.save()
+        
+        # Optionally update all users in the same program
+        User.objects.all().update(
+            university=university,
+            department=department
+        )
+        
+        return Response({
+            "university": university,
+            "department": department,
+        }, status=status.HTTP_200_OK)
+
+
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def list_courses(request):
     """
-    GET /api/programs/list_courses
-    Returns all courses/programs
+    GET /api/programs/list_courses/
+    Returns courses based on user role:
+    - Lecturers see only their courses
+    - Heads see all courses
     """
-    courses = Program.objects.all()
+    if request.user.role in ["head", "department_head"]:
+        courses = Program.objects.all()
+    else:
+        courses = Program.objects.filter(lecturer=request.user)
+    
     serializer = ProgramSerializer(courses, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class CreateCourse(APIView):
-    """
-    POST /api/programs/create_course
-    Body: {
-      "name": "...",
-      "university": "...",
-      "department": "...",
-      "lecturer_id": "<uuid>"
-    }
-    """
-
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        if request.user.role not in ["head", "department_head"]:
+            return Response(
+                {"detail": "Only department heads can create courses"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         data = request.data.copy()
 
         # Convert lecturer_id to lecturer if provided
@@ -61,19 +117,15 @@ class CreateCourse(APIView):
 
 
 class AssignLecturerToCourse(APIView):
-    """
-    POST /api/programs/assign_lecturer
-    Body: {
-      "course_id": "<uuid>",
-      "lecturer_id": "<uuid>"
-    }
-    Assigns a lecturer to a course
-    """
-
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        if request.user.role not in ["head", "department_head"]:
+            return Response(
+                {"detail": "Only department heads can assign lecturers"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         course_id = request.data.get("course_id")
         lecturer_id = request.data.get("lecturer_id")
 
@@ -99,7 +151,6 @@ class AssignLecturerToCourse(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Update the course's lecturer
         course.lecturer = lecturer
         course.save()
 
@@ -108,23 +159,19 @@ class AssignLecturerToCourse(APIView):
 
 
 @api_view(["DELETE"])
-def delete_program(request):
-    """
-    DELETE /api/program/delete_program
-    Body: {"program_id": "<uuid>"}
-    """
-    program_id = request.data.get("program_id")
-    if not program_id:
+@permission_classes([IsAuthenticated])
+def delete_program(request, pk):
+    if request.user.role not in ["head", "department_head"]:
         return Response(
-            {"detail": "program_id is required."},
-            status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            {"detail": "Only department heads can delete programs"},
+            status=status.HTTP_403_FORBIDDEN,
         )
-
+    
     try:
-        program = Program.objects.get(pk=program_id)
+        program = Program.objects.get(pk=pk)
     except Program.DoesNotExist:
         return Response(
-            {"detail": f"Program {program_id} not found."},
+            {"detail": f"Program {pk} not found."},
             status=status.HTTP_404_NOT_FOUND,
         )
 
@@ -136,35 +183,27 @@ def delete_program(request):
 
 
 @api_view(["PUT"])
-def update_program(request):
-    """
-    PUT /api/program/update_program
-    Body:
-    {
-      "program_id": "<uuid>",
-      "name": "...",
-      "university": "...",
-      "department": "...",
-      "lecturer": <user_id>
-    }
-    """
-    program_id = request.data.get("program_id")
-
-    if not program_id:
+@permission_classes([IsAuthenticated])
+def update_program(request, pk):
+    if request.user.role not in ["head", "department_head"]:
         return Response(
-            {"detail": "program_id is required."},
-            status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            {"detail": "Only department heads can update programs"},
+            status=status.HTTP_403_FORBIDDEN,
         )
-
+    
     try:
-        program = Program.objects.get(pk=program_id)
+        program = Program.objects.get(pk=pk)
     except Program.DoesNotExist:
         return Response(
-            {"detail": f"Program {program_id} not found."},
+            {"detail": f"Program {pk} not found."},
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    serializer = ProgramSerializer(program, data=request.data, partial=True)
+    data = request.data.copy()
+    if "lecturer_id" in data and "lecturer" not in data:
+        data["lecturer"] = data.pop("lecturer_id")
+
+    serializer = ProgramSerializer(program, data=data, partial=True)
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
