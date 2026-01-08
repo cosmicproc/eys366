@@ -21,6 +21,9 @@ const libreBaskerville = Outfit({
 export const metadata: Metadata = {
     title: process.env.APP_NAME,
     description: "",
+    icons: {
+        icon: "/eys366.png",
+    },
 };
 
 export default function RootLayout({

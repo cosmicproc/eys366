@@ -1,12 +1,14 @@
-from django.db import models
 import uuid
+
+from django.db import models
 from users.models import User
+
 
 class Program(models.Model):
 
     id = models.UUIDField(default=uuid.uuid4, unique=True, primary_key=True, editable=False)
     name = models.CharField(max_length=200,null=False)
-    lecturer = models.ForeignKey(User,on_delete=models.CASCADE)
+    lecturer = models.ForeignKey(User,on_delete=models.SET_NULL, null=True, blank=True)
     university = models.CharField(max_length=200) 
     department = models.CharField(max_length=100) 
 

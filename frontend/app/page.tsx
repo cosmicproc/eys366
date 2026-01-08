@@ -16,9 +16,9 @@ import {
   IconBook,
   IconGraph,
   IconTarget,
-  IconUsers,
-  IconSettings,
+  IconUsers
 } from "@tabler/icons-react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getCourses, getNodes, type Course } from "./lib/apiClient";
@@ -124,7 +124,17 @@ export default function Home() {
       });
 
   return (
-    <Container size="lg" className="py-20 mt-20">
+    <Container size="lg" className="pb-20 mt-20">
+      <div className="flex flex-col mb-8">
+          <Image
+            src="/eys366.png"
+            alt="Logo"
+            className="m-auto"
+            width={128}
+            height={128}
+          />
+          <h1 className="text-4xl font-bold m-auto">{process.env.NEXT_PUBLIC_APP_NAME || "Giraph"}</h1>
+      </div>
       {/* Welcome Section */}
       <Paper shadow="xs" p="xl" mb="xl" withBorder>
         <Group justify="space-between" mb="md">
@@ -161,18 +171,18 @@ export default function Home() {
       <Title order={2} mb="md">
         Overview
       </Title>
-      <Grid mb="xl">
-        <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
-          <Card shadow="sm" padding="lg" withBorder h="100%">
+      <Grid mb="xl" gutter="md">
+        <Grid.Col span={{ base: 12, sm: 6, md: 6, lg: 3 }}>
+          <Card shadow="sm" padding="lg" withBorder h="100%" className="lg:w-[12em]">
             {loadingStats ? (
               <Skeleton height={80} />
             ) : (
               <>
-                <Group gap="xs" mb="lg">
-                  <Text size="sm" c="dimmed" flex={1}>
+                <Group gap="xs" mb="lg" wrap="nowrap" justify="space-between" w="100%">
+                  <Text size="sm" c="dimmed" style={{ whiteSpace: "nowrap" }}>
                     Course Contents
                   </Text>
-                  <IconBook size={20} color="var(--mantine-color-blue-6)" />
+                  <IconBook size={20} color="var(--mantine-color-blue-6)" style={{ flexShrink: 0 }} />
                 </Group>
                 <Text size="xl" fw={700}>
                   {stats.courseContents}
@@ -181,17 +191,17 @@ export default function Home() {
             )}
           </Card>
         </Grid.Col>
-        <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
-          <Card shadow="sm" padding="lg" withBorder h="100%">
+        <Grid.Col span={{ base: 12, sm: 6, md: 6, lg: 3 }}>
+          <Card shadow="sm" padding="lg" withBorder h="100%" className="lg:w-[12em]">
             {loadingStats ? (
               <Skeleton height={80} />
             ) : (
               <>
-                <Group gap="xs" mb="lg">
-                  <Text size="sm" c="dimmed" flex={1}>
+                <Group gap="xs" mb="lg" wrap="nowrap" justify="space-between" w="100%">
+                  <Text size="sm" c="dimmed" style={{ whiteSpace: "nowrap" }}>
                     Course Outcomes
                   </Text>
-                  <IconTarget size={20} color="var(--mantine-color-violet-6)" />
+                  <IconTarget size={20} color="var(--mantine-color-violet-6)" style={{ flexShrink: 0 }} />
                 </Group>
                 <Text size="xl" fw={700}>
                   {stats.courseOutcomes}
@@ -200,17 +210,17 @@ export default function Home() {
             )}
           </Card>
         </Grid.Col>
-        <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
-          <Card shadow="sm" padding="lg" withBorder h="100%">
+        <Grid.Col span={{ base: 12, sm: 6, md: 6, lg: 3 }}>
+          <Card shadow="sm" padding="lg" withBorder h="100%" className="lg:w-[12em]">
             {loadingStats ? (
               <Skeleton height={80} />
             ) : (
               <>
-                <Group gap="xs" mb="lg">
-                  <Text size="sm" c="dimmed" flex={1}>
+                <Group gap="xs" mb="lg" wrap="nowrap" justify="space-between" w="100%">
+                  <Text size="sm" c="dimmed" style={{ whiteSpace: "nowrap" }}>
                     Program Outcomes
                   </Text>
-                  <IconUsers size={20} color="var(--mantine-color-green-6)" />
+                  <IconUsers size={20} color="var(--mantine-color-green-6)" style={{ flexShrink: 0 }} />
                 </Group>
                 <Text size="xl" fw={700}>
                   {stats.programOutcomes}
@@ -219,78 +229,23 @@ export default function Home() {
             )}
           </Card>
         </Grid.Col>
-        <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
-          <Card shadow="sm" padding="lg" withBorder h="100%">
+        <Grid.Col span={{ base: 12, sm: 6, md: 6, lg: 3 }}>
+          <Card shadow="sm" padding="lg" withBorder h="100%" className="lg:w-[12em]">
             {loadingStats ? (
               <Skeleton height={80} />
             ) : (
               <>
-                <Group gap="xs" mb="lg">
-                  <Text size="sm" c="dimmed" flex={1}>
+                <Group gap="xs" mb="lg" wrap="nowrap" justify="space-between" w="100%">
+                  <Text size="sm" c="dimmed" style={{ whiteSpace: "nowrap" }}>
                     Total Relations
                   </Text>
-                  <IconGraph size={20} color="var(--mantine-color-orange-6)" />
+                  <IconGraph size={20} color="var(--mantine-color-orange-6)" style={{ flexShrink: 0 }} />
                 </Group>
                 <Text size="xl" fw={700}>
                   {stats.totalRelations}
                 </Text>
               </>
             )}
-          </Card>
-        </Grid.Col>
-      </Grid>
-
-      {/* Quick Actions */}
-      <Title order={2} mb="md">
-        Quick Actions
-      </Title>
-      <Grid mb="xl">
-        {/* <Grid.Col span={{ base: 12, sm: 6 }}>
-          <Card
-            shadow="sm"
-            padding="lg"
-            withBorder
-            className="cursor-pointer hover:shadow-md transition-shadow"
-            onClick={() => router.push("/graph")}
-          >
-            <Group>
-              <div className="p-3 rounded-lg bg-blue-50">
-                <IconGraph size={24} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <Text fw={500} size="lg">
-                  View Graph
-                </Text>
-                <Text size="sm" c="dimmed">
-                  {isHead
-                    ? "Visualize course and program outcomes"
-                    : "Visualize your course outcomes"}
-                </Text>
-              </div>
-            </Group>
-          </Card>
-        </Grid.Col> */}
-        <Grid.Col span={{ base: 12, sm: 6 }}>
-          <Card
-            shadow="sm"
-            padding="lg"
-            withBorder
-            className="cursor-pointer hover:shadow-md transition-shadow"
-            onClick={() => router.push("/user")}
-          >
-            <Group>
-              <div className="p-3 rounded-lg bg-gray-50">
-                <IconSettings size={24} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <Text fw={500} size="lg">
-                  User Settings
-                </Text>
-                <Text size="sm" c="dimmed">
-                  Update your profile and account settings
-                </Text>
-              </div>
-            </Group>
           </Card>
         </Grid.Col>
       </Grid>

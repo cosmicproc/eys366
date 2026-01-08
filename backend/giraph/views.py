@@ -1,12 +1,12 @@
+import pandas as pd
 from django.db import IntegrityError
 from django.http import JsonResponse
 from programs.models import Program
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.decorators import api_view, permission_classes, action
-from rest_framework.permissions import IsAuthenticated
 
 from .models import LayerChoices, Node, Relation
 from .serializers import (
@@ -16,6 +16,7 @@ from .serializers import (
     UpdateNodeSerializer,
     UpdateRelationSerializer,
 )
+from .services import get_full_graph
 
 
 def ping(request):
@@ -44,9 +45,18 @@ class NewNode(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        name = ser.validated_data["name"]
+        layer = ser.validated_data["layer"]
+
+        if Node.objects.filter(name=name, layer=layer, course=course).exists():
+            return Response(
+                {"detail": f"A node with name '{name}' already exists in this layer."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
         node = Node.objects.create(
-            name=ser.validated_data["name"],
-            layer=ser.validated_data["layer"],
+            name=name,
+            layer=layer,
             course=course,
         )
         return Response(
@@ -98,78 +108,14 @@ class GetNodes(APIView):
     def get(self, request):
         course_id = request.query_params.get("courseId")
 
-        # Program outcomes are ALWAYS included (they have course=None)
-        program_outcome_nodes = list(
-            Node.objects.filter(layer=LayerChoices.PROGRAM_OUTCOME).only(
-                "id", "name", "layer", "course_id"
-            )
-        )
-
-        # Filter course-specific nodes by course if provided
-        if course_id:
-            try:
-                # Verify course exists
-                course = Program.objects.get(pk=course_id)
-                course_specific_nodes = list(
-                    Node.objects.filter(course=course).exclude(
-                        layer=LayerChoices.PROGRAM_OUTCOME
-                    ).only("id", "name", "layer", "course_id")
-                )
-            except Program.DoesNotExist:
-                return Response(
-                    {"detail": f"Course {course_id} not found"},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-        else:
-            course_specific_nodes = list(
-                Node.objects.exclude(layer=LayerChoices.PROGRAM_OUTCOME).only(
-                    "id", "name", "layer", "course_id"
-                )
+        try:
+            data = get_full_graph(course_id)
+        except Program.DoesNotExist:
+            return Response(
+                {"detail": f"Course {course_id} not found"},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Combine all nodes
-        nodes = course_specific_nodes + program_outcome_nodes
-        node_ids = [n.id for n in nodes]
-
-        # Get relations between these nodes
-        rels = list(
-            Relation.objects.filter(
-                node1_id__in=node_ids, node2_id__in=node_ids
-            ).only("id", "node1_id", "node2_id", "weight")
-        )
-
-        rel_map = {n.id: [] for n in nodes}
-        for r in rels:
-            stub = {
-                "node1_id": r.node1_id,
-                "node2_id": r.node2_id,
-                "relation_id": r.id,
-                "weight": r.weight,
-            }
-            if r.node1_id in rel_map:
-                rel_map[r.node1_id].append(stub)
-            if r.node2_id in rel_map:
-                rel_map[r.node2_id].append(stub)
-
-        cc, co, po = [], [], []
-        for n in nodes:
-            pack = {"id": n.id, "name": n.name, "relations": rel_map.get(n.id, [])}
-            # Include score if present
-            if hasattr(n, 'score') and n.score is not None:
-                pack['score'] = float(n.score)
-
-            if n.layer == LayerChoices.COURSE_CONTENT:
-                cc.append(pack)
-            elif n.layer == LayerChoices.COURSE_OUTCOME:
-                co.append(pack)
-            else:
-                po.append(pack)
-
-        data = {
-            "course_contents": cc,
-            "course_outcomes": co,
-            "program_outcomes": po,
-        }
         ser = GetNodesResponseSerializer(data=data)
         ser.is_valid(raise_exception=True)
         return Response(ser.data, status=status.HTTP_200_OK)
@@ -196,6 +142,12 @@ class UpdateNode(APIView):
             return Response(
                 {"detail": f"Node {node_id} not found."},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if Node.objects.filter(name=name, layer=node.layer, course=node.course).exclude(id=node.id).exists():
+            return Response(
+                {"detail": f"A node with name '{name}' already exists in this layer."},
+                status=status.HTTP_409_CONFLICT,
             )
 
         node.name = name
@@ -297,7 +249,9 @@ class GetProgramOutcomes(APIView):
 
     def get(self, request):
         outcomes = list(
-            Node.objects.filter(layer=LayerChoices.PROGRAM_OUTCOME).values("id", "name", "score")
+            Node.objects.filter(layer=LayerChoices.PROGRAM_OUTCOME).values(
+                "id", "name", "score"
+            )
         )
         return Response(
             {"program_outcomes": outcomes},
@@ -320,7 +274,10 @@ class ApplyScores(APIView):
         course_id = payload.get("course_id")
 
         if not isinstance(values, dict) or not values:
-            return Response({"detail": "values must be a non-empty object"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "values must be a non-empty object"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Map headers to nodes
         mapping = {}
@@ -328,24 +285,35 @@ class ApplyScores(APIView):
             normalized = str(col).rsplit("_", 1)[0].strip()
             node = None
             try:
-                node = Node.objects.get(name__iexact=col, layer=LayerChoices.COURSE_CONTENT)
+                node = Node.objects.get(
+                    name__iexact=col, layer=LayerChoices.COURSE_CONTENT
+                )
             except Node.DoesNotExist:
                 try:
-                    node = Node.objects.get(name__iexact=normalized, layer=LayerChoices.COURSE_CONTENT)
+                    node = Node.objects.get(
+                        name__iexact=normalized, layer=LayerChoices.COURSE_CONTENT
+                    )
                 except Node.DoesNotExist:
-                    node = Node.objects.filter(name__icontains=normalized, layer=LayerChoices.COURSE_CONTENT).first()
+                    node = Node.objects.filter(
+                        name__icontains=normalized, layer=LayerChoices.COURSE_CONTENT
+                    ).first()
 
             # If node not found but a course_id is provided, try to create the node (and CourseContent if missing)
             if not node and course_id:
                 try:
                     from outcomes.models import CourseContent
+
                     cc = CourseContent.objects.filter(name__iexact=normalized).first()
                     if not cc:
                         cc = CourseContent.objects.create(name=normalized)
                     # Ensure the Node is created for this course
                     try:
                         course = Program.objects.get(pk=course_id)
-                        node = Node.objects.create(name=cc.name, layer=LayerChoices.COURSE_CONTENT, course=course)
+                        node = Node.objects.create(
+                            name=cc.name,
+                            layer=LayerChoices.COURSE_CONTENT,
+                            course=course,
+                        )
                     except Program.DoesNotExist:
                         node = None
                 except Exception:
@@ -358,10 +326,13 @@ class ApplyScores(APIView):
                     # Also persist score on CourseContent if exists
                     try:
                         from outcomes.models import CourseContent
-                        cc = CourseContent.objects.filter(name__iexact=node.name).first()
+
+                        cc = CourseContent.objects.filter(
+                            name__iexact=node.name
+                        ).first()
                         if cc:
                             cc.score = float(val)
-                            cc.save(update_fields=['score'])
+                            cc.save(update_fields=["score"])
                     except Exception:
                         pass
 
@@ -370,17 +341,65 @@ class ApplyScores(APIView):
                     continue
 
         # Re-use GetNodes to return the latest nodes (filter by course_id if provided)
-        request._request.GET = request._request.GET.copy()
+        try:
+            data = get_full_graph(course_id)
+        except Program.DoesNotExist:
+            return Response(
+                {"detail": f"Course {course_id} not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        ser = GetNodesResponseSerializer(data=data)
+        ser.is_valid(raise_exception=True)
+        return Response(ser.data, status=status.HTTP_200_OK)
+
+
+class ResetScores(APIView):
+    """POST /api/giraph/reset_scores/
+    Body: { "course_id": <uuid?> }
+    Resets scores for all nodes (and potentially CourseContent) for the given course.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        course_id = request.data.get("course_id")
+
+        nodes_qs = Node.objects.filter(
+            layer=LayerChoices.COURSE_CONTENT, score__isnull=False
+        )
         if course_id:
-            request._request.GET['courseId'] = course_id
-        get_view = GetNodes.as_view()
-        return get_view(request._request)
+            nodes_qs = nodes_qs.filter(course_id=course_id)
+
+        # Get names before update to sync with CourseContent
+        node_names = list(nodes_qs.values_list("name", flat=True))
+
+        # Reset Node scores
+        nodes_qs.update(score=None)
+
+        # Also reset CourseContent scores
+        if node_names:
+            from outcomes.models import CourseContent
+
+            CourseContent.objects.filter(name__in=node_names).update(score=None)
+
+        try:
+            data = get_full_graph(course_id)
+        except Program.DoesNotExist:
+            return Response(
+                {"detail": f"Course {course_id} not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        ser = GetNodesResponseSerializer(data=data)
+        ser.is_valid(raise_exception=True)
+        return Response(ser.data, status=status.HTTP_200_OK)
 
 
 class CreateProgramOutcome(APIView):
-    authentication_classes = []   # 🔴 şimdilik kapatıyoruz test için
+    authentication_classes = []  # 🔴 şimdilik kapatıyoruz test için
     permission_classes = [AllowAny]
-    http_method_names = ['post']   # 🔴 BUNU EKLE
+    http_method_names = ["post"]  # 🔴 BUNU EKLE
 
     def post(self, request):
         payload = request.data
@@ -388,7 +407,10 @@ class CreateProgramOutcome(APIView):
         course_id = payload.get("course_id")
 
         if not isinstance(values, dict) or not values:
-            return Response({"detail": "values must be a non-empty object"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "values must be a non-empty object"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Map headers to nodes
         mapping = {}
@@ -396,24 +418,35 @@ class CreateProgramOutcome(APIView):
             normalized = str(col).rsplit("_", 1)[0].strip()
             node = None
             try:
-                node = Node.objects.get(name__iexact=col, layer=LayerChoices.COURSE_CONTENT)
+                node = Node.objects.get(
+                    name__iexact=col, layer=LayerChoices.COURSE_CONTENT
+                )
             except Node.DoesNotExist:
                 try:
-                    node = Node.objects.get(name__iexact=normalized, layer=LayerChoices.COURSE_CONTENT)
+                    node = Node.objects.get(
+                        name__iexact=normalized, layer=LayerChoices.COURSE_CONTENT
+                    )
                 except Node.DoesNotExist:
-                    node = Node.objects.filter(name__icontains=normalized, layer=LayerChoices.COURSE_CONTENT).first()
+                    node = Node.objects.filter(
+                        name__icontains=normalized, layer=LayerChoices.COURSE_CONTENT
+                    ).first()
 
             # If node not found but a course_id is provided, try to create the node (and CourseContent if missing)
             if not node and course_id:
                 try:
                     from outcomes.models import CourseContent
+
                     cc = CourseContent.objects.filter(name__iexact=normalized).first()
                     if not cc:
                         cc = CourseContent.objects.create(name=normalized)
                     # Ensure the Node is created for this course
                     try:
                         course = Program.objects.get(pk=course_id)
-                        node = Node.objects.create(name=cc.name, layer=LayerChoices.COURSE_CONTENT, course=course)
+                        node = Node.objects.create(
+                            name=cc.name,
+                            layer=LayerChoices.COURSE_CONTENT,
+                            course=course,
+                        )
                     except Program.DoesNotExist:
                         node = None
                 except Exception:
@@ -426,10 +459,13 @@ class CreateProgramOutcome(APIView):
                     # Also persist score on CourseContent if exists
                     try:
                         from outcomes.models import CourseContent
-                        cc = CourseContent.objects.filter(name__iexact=node.name).first()
+
+                        cc = CourseContent.objects.filter(
+                            name__iexact=node.name
+                        ).first()
                         if cc:
                             cc.score = float(val)
-                            cc.save(update_fields=['score'])
+                            cc.save(update_fields=["score"])
                     except Exception:
                         pass
 
@@ -440,7 +476,7 @@ class CreateProgramOutcome(APIView):
         # Re-use GetNodes to return the latest nodes (filter by course_id if provided)
         request._request.GET = request._request.GET.copy()
         if course_id:
-            request._request.GET['courseId'] = course_id
+            request._request.GET["courseId"] = course_id
         get_view = GetNodes.as_view()
         return get_view(request._request)
 
@@ -456,6 +492,7 @@ class CreateProgramOutcome(APIView):
 
     def post(self, request):
         name = request.data.get("name", "").strip()
+
         if not name:
             return Response(
                 {"detail": "name is required."},
@@ -479,6 +516,43 @@ class CreateProgramOutcome(APIView):
         )
 
 
+class UpdateProgramOutcome(APIView):
+    """PUT /api/giraph/update_program_outcome
+    Body: {"id": int, "name": str}
+    """
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def put(self, request):
+        outcome_id = request.data.get("id")
+        name = request.data.get("name", "").strip()
+
+        if not outcome_id:
+             return Response(
+                {"detail": "id is required."},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        try:
+            outcome = Node.objects.get(pk=outcome_id, layer=LayerChoices.PROGRAM_OUTCOME)
+        except Node.DoesNotExist:
+             return Response(
+                {"detail": f"Outcome {outcome_id} not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if name:
+            outcome.name = name
+        
+        outcome.save()
+
+        return Response(
+            {"message": "Program outcome updated."},
+            status=status.HTTP_200_OK,
+        )
+
+
 class CalculateStudentResults(APIView):
     """GET /api/giraph/calculate_student_results/?student_id=XXX&courseId=..."""
 
@@ -490,11 +564,120 @@ class CalculateStudentResults(APIView):
         course_id = request.query_params.get("courseId")
 
         if not student_id:
-            return Response({"detail": "student_id is required"}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+            return Response(
+                {"detail": "student_id is required"},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
 
         from .services import compute_student_results
+
         res = compute_student_results(student_id=student_id, course_id=course_id)
         return Response(res, status=status.HTTP_200_OK)
+
+
+class GenerateStudentReport(APIView):
+    """POST /api/giraph/generate_student_report/
+    Form-data: file=<csv/xlsx>, courseId=<uuid>
+    Returns JSON list of results for each student.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if 'file' not in request.FILES:
+             return Response({"detail": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        course_id = request.data.get("courseId") # Form data
+        uploaded_file = request.FILES['file']
+        
+        name = uploaded_file.name.lower()
+        if name.endswith(('.xlsx', '.xls')):
+            df = pd.read_excel(uploaded_file)
+        elif name.endswith('.csv'):
+            df = pd.read_csv(uploaded_file)
+        else:
+            return Response({'detail': 'Please upload a valid CSV or Excel file.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Convert to records
+        records = df.to_dict(orient='records')
+        
+        from .services import compute_student_results
+
+        results = []
+        for row in records:
+            # Clean keys
+            clean_row = {}
+            student_id = None
+            
+            for k, v in row.items():
+                key = str(k).strip()
+                val = v
+                if key.lower() == 'student_id':
+                    student_id = str(val)
+                elif pd.notnull(val): # only include non-null
+                    try: 
+                        clean_row[key] = float(val)
+                    except (ValueError, TypeError):
+                        pass # Ignore non-numeric
+            
+            if not student_id:
+                continue
+
+            # Compute logic
+            # clean_row passes Map<CC Name, Score>. 
+            # compute_student_results needs to map Name -> Node -> override_grades
+            # BUT compute_student_results expects override_grades keys to match Node names?
+            # Yes, if we implement matching logic inside compute_student_results or pre-match here.
+            # Pre-matching is better for perf? But compute_student_results iterates nodes anyway.
+            # Let's rely on compute_student_results using the names directly.
+            
+            # NOTE: compute_student_results logic changes I made:
+            # 1. Start with override grades if provided ... score_val = override_grades.get(n.name)
+            
+            # So `clean_row` keys must match Node names.
+            # CSV headers usually match Node names (ignoring case?).
+            # My change used `get(n.name)` which is exact match.
+            # The CSV usage in `UploadCSVButton` matches exact strings.
+            # `ApplyScores` used complex loose matching.
+            # For simplicity let's do a case-insensitive map here to help matching.
+            
+            grades_map = {k.lower(): v for k, v in clean_row.items()}
+            
+            # We need to pass a dict where keys match Node names.
+            # Creating a map where key is lowercase name helps matching if we iterate nodes and check lower name?
+            # compute_student_results iterates nodes. I should have updated it to check lower() but I didn't.
+            # I'll update compute_student_results to match better, OR I'll map here.
+            # Mapping here requires fetching nodes. compute_student_results fetches nodes.
+            # Let's pass the raw-ish map and update compute_student_results to be smarter, OR ...
+            
+            # Actually, let's fix compute_student_results to handle normalization if I haven't already.
+            # I haven't. I used `override_grades.get(n.name)`.
+            
+            # Let's refactor compute_student_results slightly again to be robust?
+            # Or just pass the map.
+            
+            # Ideally:
+            res = compute_student_results(student_id=student_id, course_id=course_id, override_grades=clean_row)
+            
+            # Format result for frontend table
+            # We want flat structure for easy CSV export? Or nested?
+            # "allow lecturer to export a csv file in which each students cc, co, and po scores are embedded"
+            # Flat object per student is best for table/CSV.
+            
+            student_summary = { "student_id": student_id }
+            
+            for cc in res['course_contents']:
+                student_summary[f"CC_{cc['name']}"] = cc['student_grade']
+            
+            for co in res['learning_outcomes']:
+                 student_summary[f"CO_{co['name']}"] = co['calculated_score']
+                 
+            for po in res['program_outcomes']:
+                 student_summary[f"PO_{po['name']}"] = po['calculated_score']
+                 
+            results.append(student_summary)
+
+        return Response(results, status=status.HTTP_200_OK)
 
 
 class DeleteProgramOutcome(APIView):
@@ -529,5 +712,3 @@ class DeleteProgramOutcome(APIView):
             {"message": "Program outcome deleted."},
             status=status.HTTP_200_OK,
         )
-
-

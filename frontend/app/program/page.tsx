@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../lib/AuthContext";
 import {
   assignLecturerToCourse,
+  Course,
   createCourse,
   createLecturer,
   createProgramOutcome,
@@ -35,13 +36,7 @@ interface Lecturer {
   id: string;
   name: string;
   username: string;
-}
-
-interface Course {
-  id: string;
-  name: string;
-  department: string;
-  lecturer?: string;
+  role: string;
 }
 
 interface ProgramOutcome {
@@ -89,6 +84,7 @@ export default function ProgramPage() {
   const [editingCourseId, setEditingCourseId] = useState<string | null>(null);
   const [courseName, setCourseName] = useState("");
   const [courseDept, setCourseDept] = useState("");
+  const [courseLecturer, setCourseLecturer] = useState<string | null>(null);
   const [creatingCourse, setCreatingCourse] = useState(false);
   const [courseError, setCourseError] = useState<string | null>(null);
   const [deletingCourseId, setDeletingCourseId] = useState<string | null>(null);
@@ -97,7 +93,6 @@ export default function ProgramPage() {
   const [outcomeModalOpen, setOutcomeModalOpen] = useState(false);
   const [editingOutcomeId, setEditingOutcomeId] = useState<number | null>(null);
   const [outcomeName, setOutcomeName] = useState("");
-  const [outcomeDescription, setOutcomeDescription] = useState("");
   const [creatingOutcome, setCreatingOutcome] = useState(false);
   const [outcomeError, setOutcomeError] = useState<string | null>(null);
   const [deletingOutcomeId, setDeletingOutcomeId] = useState<number | null>(
@@ -153,6 +148,7 @@ export default function ProgramPage() {
           l.first_name && l.last_name
             ? `${l.first_name} ${l.last_name}`
             : l.username,
+        role: l.role,
       }));
       
       setLecturers(transformedLecturers);
@@ -262,7 +258,8 @@ export default function ProgramPage() {
   const openEditCourse = (course: Course) => {
     setEditingCourseId(course.id);
     setCourseName(course.name);
-    setCourseDept(course.department);
+    setCourseDept(course.department || "");
+    setCourseLecturer(course.lecturer || null);
     setCourseModalOpen(true);
   };
 
@@ -285,6 +282,7 @@ export default function ProgramPage() {
         const updatedCourse = await updateCourse(editingCourseId, {
           name: courseName,
           department: courseDept,
+          lecturer_id: courseLecturer,
         });
         
         setCourses((prev) =>
@@ -353,7 +351,6 @@ export default function ProgramPage() {
   const openEditOutcome = (outcome: ProgramOutcome) => {
     setEditingOutcomeId(outcome.id);
     setOutcomeName(outcome.name);
-    setOutcomeDescription(outcome.description || "");
     setOutcomeModalOpen(true);
   };
 
@@ -370,14 +367,14 @@ export default function ProgramPage() {
       if (editingOutcomeId) {
         const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
         const response = await fetch(
-          `${API_URL}/api/outcomes/program-outcomes/${editingOutcomeId}/`,
+          `${API_URL}/api/giraph/update_program_outcome/`,
           {
             method: "PUT",
             headers: getAuthHeaders(),
             credentials: "include",
             body: JSON.stringify({
+              id: editingOutcomeId,
               name: outcomeName,
-              description: outcomeDescription || "",
             }),
           }
         );
@@ -404,7 +401,6 @@ export default function ProgramPage() {
       }
 
       setOutcomeName("");
-      setOutcomeDescription("");
       setEditingOutcomeId(null);
       setOutcomeModalOpen(false);
       await loadData();
@@ -560,29 +556,22 @@ export default function ProgramPage() {
     }
   };
 
-  if (loading || pageLoading) {
-    return (
-      <Container className="py-10 text-center">
-        <Text>Loading...</Text>
-      </Container>
-    );
-  }
-
   return (
-    <Container size="md" className="py-10 mt-20">
+    <Container size="md" className="py-10 mt-20 min-w-[40em]">
       <Paper shadow="xs" p="md" withBorder>
         <Group justify="space-between" mb="lg">
           <Title order={2}>Program Management</Title>
-          <Button
+        </Group>
+
+        <Button
             variant="light"
             color="grape"
             onClick={() => setProgramSettingsModalOpen(true)}
           >
             Program Settings
-          </Button>
-        </Group>
+        </Button>
 
-        <Title order={4} mb="md">
+        <Title order={4} mb="md" mt="xl">
           Courses
         </Title>
         <Group mb="lg">
@@ -604,13 +593,14 @@ export default function ProgramPage() {
             <Table.Tr>
               <Table.Th>Name</Table.Th>
               <Table.Th>Department</Table.Th>
+              <Table.Th>Lecturer</Table.Th>
               <Table.Th>Actions</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {courses.length === 0 ? (
               <Table.Tr>
-                <Table.Td colSpan={3} className="text-center">
+                <Table.Td colSpan={4} className="text-center">
                   <Text c="dimmed">No courses created yet</Text>
                 </Table.Td>
               </Table.Tr>
@@ -619,6 +609,7 @@ export default function ProgramPage() {
                 <Table.Tr key={course.id}>
                   <Table.Td>{course.name}</Table.Td>
                   <Table.Td>{course.department}</Table.Td>
+                  <Table.Td>{course.lecturer_name || "-"}</Table.Td>
                   <Table.Td>
                     <Group gap="xs">
                       <Button
@@ -679,14 +670,16 @@ export default function ProgramPage() {
                     >
                       Edit
                     </Button>
-                    <Button
-                      size="xs"
-                      variant="light"
-                      color="red"
-                      onClick={() => handleDeleteLecturer(lecturer.id)}
-                    >
-                      Delete
-                    </Button>
+                    {lecturer.role !== "department_head" && (
+                      <Button
+                        size="xs"
+                        variant="light"
+                        color="red"
+                        onClick={() => handleDeleteLecturer(lecturer.id)}
+                      >
+                        Delete
+                      </Button>
+                    )}
                   </Group>
                 </Table.Td>
               </Table.Tr>
@@ -702,7 +695,6 @@ export default function ProgramPage() {
             onClick={() => {
               setEditingOutcomeId(null);
               setOutcomeName("");
-              setOutcomeDescription("");
               setOutcomeModalOpen(true);
             }}
             variant="light"
@@ -806,6 +798,16 @@ export default function ProgramPage() {
           mb="md"
           placeholder="Enter department"
         />
+        <Select
+          label="Assigned Lecturer"
+          placeholder="Select a lecturer"
+          data={lecturers.map((l) => ({ value: l.id, label: l.name }))}
+          value={courseLecturer}
+          onChange={setCourseLecturer}
+          clearable
+          searchable
+          mb="md"
+        />
         <Group justify="flex-end">
           <Button
             variant="default"
@@ -840,13 +842,6 @@ export default function ProgramPage() {
           mb="md"
           placeholder="Enter outcome name"
           autoFocus
-        />
-        <TextInput
-          label="Description"
-          value={outcomeDescription}
-          onChange={(e) => setOutcomeDescription(e.currentTarget.value)}
-          mb="md"
-          placeholder="Enter description"
         />
         <Group justify="flex-end">
           <Button

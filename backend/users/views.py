@@ -1,9 +1,10 @@
+from datetime import timedelta
+
+from django.conf import settings
 from django.contrib.auth import authenticate
 from django.core.mail import send_mail
-from django.utils.crypto import get_random_string
 from django.utils import timezone
-from datetime import timedelta
-from django.conf import settings
+from django.utils.crypto import get_random_string
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
@@ -195,6 +196,12 @@ def delete_user(request, pk):
         return Response(
             {"detail": "User not found"},
             status=status.HTTP_404_NOT_FOUND
+        )
+
+    if str(user.id) == str(request.user.id):
+        return Response(
+            {"detail": "You cannot delete your own account"},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
     user.delete()

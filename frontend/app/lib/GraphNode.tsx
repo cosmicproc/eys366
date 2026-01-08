@@ -8,6 +8,7 @@ export default function GraphNode(props: {
     data: {
         label: string;
         apiId: number;
+        score?: number;
     };
     sourcePosition?: Position;
     targetPosition?: Position;
@@ -15,11 +16,18 @@ export default function GraphNode(props: {
     onDelete?: (apiId: number, currentName: string) => void;
 }) {
     return (
-        <div className="px-4 py-2">
+        <div>
             {props.targetPosition && (
                 <Handle type="target" position={props.targetPosition} />
             )}
-            <div className="font-medium mb-2 text-center">{props.data.label}</div>
+            <div className="font-medium mb-1 text-center">{props.data.label}</div>
+            
+            {(props.data.score !== undefined && props.data.score !== null) && (
+                <div className="text-xs text-center text-gray-600 mb-2 font-semibold">
+                    Score: {Math.round(props.data.score)}%
+                </div>
+            )}
+
             <div className="flex gap-1 justify-center">
                 <ActionIcon
                     variant="subtle"

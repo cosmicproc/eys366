@@ -15,9 +15,9 @@ from .serializers import ProgramSerializer
 def program_info(request):
     """
     GET /api/programs/program-info/
-    Returns all lecturers in the system
+    Returns all users who can be assigned to courses (lecturers and heads)
     """
-    lecturers = User.objects.filter(role="lecturer")
+    lecturers = User.objects.filter(role__in=["lecturer", "head", "department_head"])
     serializer = UserSerializer(lecturers, many=True)
     return Response({"lecturers": serializer.data}, status=status.HTTP_200_OK)
 
@@ -199,7 +199,11 @@ def update_program(request, pk):
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    serializer = ProgramSerializer(program, data=request.data, partial=True)
+    data = request.data.copy()
+    if "lecturer_id" in data and "lecturer" not in data:
+        data["lecturer"] = data.pop("lecturer_id")
+
+    serializer = ProgramSerializer(program, data=data, partial=True)
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
