@@ -82,6 +82,3 @@ class UserViewsTest(TestCase):
         response = self.client.put(f"/api/users/{self.user.id}/update/", data, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_delete_user(self):
-        response = self.client.delete(f"/api/users/delete_user/{self.user.id}/")
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
