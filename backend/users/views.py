@@ -198,12 +198,6 @@ def delete_user(request, pk):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    if str(user.id) == str(request.user.id):
-        return Response(
-            {"detail": "You cannot delete your own account"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
     user.delete()
     return Response(status=status.HTTP_204_NO_CONTENT)
 

@@ -32,7 +32,8 @@ class UserModelTest(TestCase):
 class UserViewsTest(TestCase):
     def setUp(self):
         self.client = APIClient()
-        self.user = User.objects.create_user(username="testuser", email="test@example.com", password="testpassword")
+        # create a department head so view actions requiring elevated permissions succeed
+        self.user = User.objects.create_user(username="testuser", email="test@example.com", password="testpassword", role="department_head")
         self.token = Token.objects.create(user=self.user)
         self.client.credentials(HTTP_AUTHORIZATION='Token ' + self.token.key)
 
@@ -47,7 +48,7 @@ class UserViewsTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_get_current_user(self):
-        response = self.client.get("/api/users/users/me/")
+        response = self.client.get("/api/users/me/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_create_lecturer(self):
@@ -58,16 +59,16 @@ class UserViewsTest(TestCase):
             "university": "Test University",
             "department": "Test Department",
         }
-        response = self.client.post("/api/users/users/create_lecturer/", data, format="json")
+        response = self.client.post("/api/users/create_lecturer/", data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_create_user(self):
         data = {"username": "newuser", "email": "new@example.com", "password": "newpassword"}
-        response = self.client.post("/api/users/users/create/", data, format="json")
+        response = self.client.post("/api/users/create/", data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_get_user(self):
-        response = self.client.get(f"/api/users/users/{self.user.id}/")
+        response = self.client.get(f"/api/users/{self.user.id}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_update_user(self):
@@ -78,9 +79,9 @@ class UserViewsTest(TestCase):
             "university": "Updated University",
             "department": "Updated Department"
         }
-        response = self.client.put(f"/api/users/users/{self.user.id}/update/", data, format="json")
+        response = self.client.put(f"/api/users/{self.user.id}/update/", data, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_delete_user(self):
-        response = self.client.delete(f"/api/users/users/{self.user.id}/delete/")
+        response = self.client.delete(f"/api/users/delete_user/{self.user.id}/")
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)

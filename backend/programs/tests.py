@@ -23,7 +23,11 @@ class ProgramModelTest(TestCase):
 class ProgramViewsTest(TestCase):
     def setUp(self):
         self.client = APIClient()
-        self.lecturer = User.objects.create(username="test_lecturer", email="test@example.com", role="lecturer")
+        # create a department head so test actions requiring elevated permissions succeed
+        self.lecturer = User.objects.create_user(username="test_lecturer", email="test@example.com", password="password", role="department_head")
+        from rest_framework.authtoken.models import Token
+        token = Token.objects.create(user=self.lecturer)
+        self.client.credentials(HTTP_AUTHORIZATION='Token ' + token.key)
         self.program = Program.objects.create(
             name="Test Program",
             lecturer=self.lecturer,
@@ -32,11 +36,11 @@ class ProgramViewsTest(TestCase):
         )
 
     def test_program_info(self):
-        response = self.client.get("/api/programs/program/program-info")
+        response = self.client.get("/api/programs/program-info/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_list_courses(self):
-        response = self.client.get("/api/programs/programs/list_courses")
+        response = self.client.get("/api/programs/list_courses/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_create_course(self):
@@ -46,7 +50,7 @@ class ProgramViewsTest(TestCase):
             "department": "New Department",
             "lecturer_id": str(self.lecturer.id)
         }
-        response = self.client.post("/api/programs/programs/create_course", data, format="json")
+        response = self.client.post("/api/programs/create_course/", data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_assign_lecturer_to_course(self):
@@ -55,18 +59,16 @@ class ProgramViewsTest(TestCase):
             "course_id": str(self.program.id),
             "lecturer_id": str(new_lecturer.id)
         }
-        response = self.client.post("/api/programs/programs/assign_lecturer", data, format="json")
+        response = self.client.post("/api/programs/assign_lecturer/", data, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_delete_program(self):
-        data = {"program_id": str(self.program.id)}
-        response = self.client.delete("/api/programs/program/delete_program", data, format="json")
+        response = self.client.delete(f"/api/programs/delete_program/{self.program.id}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_update_program(self):
         data = {
-            "program_id": str(self.program.id),
             "name": "Updated Program Name"
         }
-        response = self.client.put("/api/programs/program/update_program", data, format="json")
+        response = self.client.put(f"/api/programs/update_program/{self.program.id}/", data, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)

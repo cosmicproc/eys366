@@ -3,3 +3,4 @@ openpyxl
 django
 djangorestframework
 django-cors-headers
+requests

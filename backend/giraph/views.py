@@ -196,7 +196,7 @@ class DeleteNode(APIView):
         if not node_id:
             return Response(
                 {"detail": "node_id is required."},
-                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
@@ -209,6 +209,9 @@ class DeleteNode(APIView):
 
         node.delete()
         return Response({"message": "Node deleted."}, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        return self.delete(request)
 
 
 class DeleteRelation(APIView):
@@ -224,7 +227,7 @@ class DeleteRelation(APIView):
         if not relation_id:
             return Response(
                 {"detail": "relation_id is required."},
-                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
@@ -237,6 +240,9 @@ class DeleteRelation(APIView):
 
         rel.delete()
         return Response({"message": "Relation deleted."}, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        return self.delete(request)
 
 
 class GetProgramOutcomes(APIView):
@@ -396,90 +402,6 @@ class ResetScores(APIView):
         return Response(ser.data, status=status.HTTP_200_OK)
 
 
-class CreateProgramOutcome(APIView):
-    authentication_classes = []  # 🔴 şimdilik kapatıyoruz test için
-    permission_classes = [AllowAny]
-    http_method_names = ["post"]  # 🔴 BUNU EKLE
-
-    def post(self, request):
-        payload = request.data
-        values = payload.get("values", {})
-        course_id = payload.get("course_id")
-
-        if not isinstance(values, dict) or not values:
-            return Response(
-                {"detail": "values must be a non-empty object"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Map headers to nodes
-        mapping = {}
-        for col, val in values.items():
-            normalized = str(col).rsplit("_", 1)[0].strip()
-            node = None
-            try:
-                node = Node.objects.get(
-                    name__iexact=col, layer=LayerChoices.COURSE_CONTENT
-                )
-            except Node.DoesNotExist:
-                try:
-                    node = Node.objects.get(
-                        name__iexact=normalized, layer=LayerChoices.COURSE_CONTENT
-                    )
-                except Node.DoesNotExist:
-                    node = Node.objects.filter(
-                        name__icontains=normalized, layer=LayerChoices.COURSE_CONTENT
-                    ).first()
-
-            # If node not found but a course_id is provided, try to create the node (and CourseContent if missing)
-            if not node and course_id:
-                try:
-                    from outcomes.models import CourseContent
-
-                    cc = CourseContent.objects.filter(name__iexact=normalized).first()
-                    if not cc:
-                        cc = CourseContent.objects.create(name=normalized)
-                    # Ensure the Node is created for this course
-                    try:
-                        course = Program.objects.get(pk=course_id)
-                        node = Node.objects.create(
-                            name=cc.name,
-                            layer=LayerChoices.COURSE_CONTENT,
-                            course=course,
-                        )
-                    except Program.DoesNotExist:
-                        node = None
-                except Exception:
-                    node = None
-
-            if node:
-                try:
-                    node.score = float(val)
-                    node.save(update_fields=["score"])
-                    # Also persist score on CourseContent if exists
-                    try:
-                        from outcomes.models import CourseContent
-
-                        cc = CourseContent.objects.filter(
-                            name__iexact=node.name
-                        ).first()
-                        if cc:
-                            cc.score = float(val)
-                            cc.save(update_fields=["score"])
-                    except Exception:
-                        pass
-
-                    mapping[node.name] = float(val)
-                except Exception:
-                    continue
-
-        # Re-use GetNodes to return the latest nodes (filter by course_id if provided)
-        request._request.GET = request._request.GET.copy()
-        if course_id:
-            request._request.GET["courseId"] = course_id
-        get_view = GetNodes.as_view()
-        return get_view(request._request)
-
 
 class CreateProgramOutcome(APIView):
     """POST /api/giraph/create_program_outcome
@@ -623,47 +545,10 @@ class GenerateStudentReport(APIView):
             if not student_id:
                 continue
 
-            # Compute logic
-            # clean_row passes Map<CC Name, Score>. 
-            # compute_student_results needs to map Name -> Node -> override_grades
-            # BUT compute_student_results expects override_grades keys to match Node names?
-            # Yes, if we implement matching logic inside compute_student_results or pre-match here.
-            # Pre-matching is better for perf? But compute_student_results iterates nodes anyway.
-            # Let's rely on compute_student_results using the names directly.
-            
-            # NOTE: compute_student_results logic changes I made:
-            # 1. Start with override grades if provided ... score_val = override_grades.get(n.name)
-            
-            # So `clean_row` keys must match Node names.
-            # CSV headers usually match Node names (ignoring case?).
-            # My change used `get(n.name)` which is exact match.
-            # The CSV usage in `UploadCSVButton` matches exact strings.
-            # `ApplyScores` used complex loose matching.
-            # For simplicity let's do a case-insensitive map here to help matching.
-            
             grades_map = {k.lower(): v for k, v in clean_row.items()}
-            
-            # We need to pass a dict where keys match Node names.
-            # Creating a map where key is lowercase name helps matching if we iterate nodes and check lower name?
-            # compute_student_results iterates nodes. I should have updated it to check lower() but I didn't.
-            # I'll update compute_student_results to match better, OR I'll map here.
-            # Mapping here requires fetching nodes. compute_student_results fetches nodes.
-            # Let's pass the raw-ish map and update compute_student_results to be smarter, OR ...
-            
-            # Actually, let's fix compute_student_results to handle normalization if I haven't already.
-            # I haven't. I used `override_grades.get(n.name)`.
-            
-            # Let's refactor compute_student_results slightly again to be robust?
-            # Or just pass the map.
-            
-            # Ideally:
+        
             res = compute_student_results(student_id=student_id, course_id=course_id, override_grades=clean_row)
-            
-            # Format result for frontend table
-            # We want flat structure for easy CSV export? Or nested?
-            # "allow lecturer to export a csv file in which each students cc, co, and po scores are embedded"
-            # Flat object per student is best for table/CSV.
-            
+ 
             student_summary = { "student_id": student_id }
             
             for cc in res['course_contents']:
