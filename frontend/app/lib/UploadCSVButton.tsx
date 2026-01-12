@@ -94,12 +94,14 @@ export default function UploadCSVButton({
         reader.readAsText(file);
     };
 
-    // Get unique student IDs for dropdown
-    const studentIds =
-        csvData?.rows
+    // Get unique student IDs for dropdown (with "All Students" option)
+    const studentIds = [
+        { value: "__all__", label: "All Students" },
+        ...(csvData?.rows
             .map((row) => row.student_id)
-            .filter((id, index, self) => id && self.indexOf(id) === index) ||
-        [];
+            .filter((id, index, self) => id && self.indexOf(id) === index)
+            .map((id) => ({ value: id, label: id })) || [])
+    ];
 
     // Calculate averages for numeric columns (excluding student_id)
     const calculateAverages = (): Record<string, number> => {
@@ -314,6 +316,13 @@ export default function UploadCSVButton({
             }
         }
 
+        // Filter by selected student ID if one is chosen (skip if "All Students")
+        if (selectedStudentId && selectedStudentId !== "__all__" && dataToExport.length > 0) {
+            dataToExport = dataToExport.filter(
+                row => String(row.student_id) === String(selectedStudentId)
+            );
+        }
+
         if (dataToExport.length === 0) return;
         
         // Collect all keys
@@ -332,7 +341,9 @@ export default function UploadCSVButton({
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = "student_outcomes_report.csv";
+        a.download = selectedStudentId && selectedStudentId !== "__all__"
+            ? `student_${selectedStudentId}_outcomes_report.csv`
+            : "student_outcomes_report.csv";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -394,7 +405,7 @@ export default function UploadCSVButton({
                                 label="Choose Student ID"
                                 placeholder="Select ID"
                                 data={studentIds}
-                                value={selectedStudentId}
+                                value={selectedStudentId || "__all__"}
                                 onChange={(value) => {
                                     setSelectedStudentId(value);
                                 }}
@@ -512,14 +523,28 @@ export default function UploadCSVButton({
                          <Text size="sm" c="dimmed">
                              Filtering {filteredReportData.length} of {reportData.length} students
                          </Text>
-                        <Button 
-                            variant="outline"
-                            color="teal"
-                            onClick={() => setReportModalOpen(false)}
-                            disabled={filteredReportData.length === 0}
-                        >
-                            Apply Filter
-                        </Button>
+                        <Group>
+                            <Button 
+                                variant="subtle"
+                                color="gray"
+                                onClick={() => {
+                                    setFilterColumn(null);
+                                    setFilterOperator("gt");
+                                    setFilterValue("");
+                                }}
+                                disabled={!filterColumn && filterValue === ""}
+                            >
+                                Reset Filter
+                            </Button>
+                            <Button 
+                                variant="outline"
+                                color="teal"
+                                onClick={() => setReportModalOpen(false)}
+                                disabled={filteredReportData.length === 0}
+                            >
+                                Apply Filter
+                            </Button>
+                        </Group>
                     </Group>
                 </div>
             </Modal>
