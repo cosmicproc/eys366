@@ -38,16 +38,11 @@ export default function Home() {
   const [loadingCourses, setLoadingCourses] = useState(true);
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push("/login");
-      return;
-    }
-
     if (user) {
       loadStatistics();
       loadCourses();
     }
-  }, [user, authLoading, router]);
+  }, [user]);
 
   const loadCourses = async () => {
     try {

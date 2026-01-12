@@ -6,7 +6,7 @@ import {
     Modal,
     NumberInput,
     Text,
-    TextInput,
+    Textarea,
 } from "@mantine/core";
 import {
     Background,
@@ -45,8 +45,37 @@ const DISTINCT_COLORS = [
     "#afb42b", "#f57c00", "#795548", "#607d8b"
 ];
 
+// Constants for layout
+const NODE_PADDING = 20; // padding inside node
+const NODE_MIN_WIDTH = 150;
+const NODE_MAX_WIDTH = 350;
+const CHAR_WIDTH = 8; // approximate character width for normal font
+const CHAR_WIDTH_SMALL = 6; // approximate character width for smaller font (11px)
+const NODE_BASE_HEIGHT = 80; // base height for node
+const NODE_BASE_HEIGHT_SMALL = 65; // base height for node with small font
+const VERTICAL_GAP = 50; // vertical gap between nodes in same layer
+const LAYER_GAP = 225; // horizontal gap between layers (increased for clarity)
+
+// Calculate node width based on text length
+const calculateNodeWidth = (label: string): number => {
+    const textWidth = label.length * CHAR_WIDTH + NODE_PADDING * 2;
+    return Math.max(NODE_MIN_WIDTH, Math.min(NODE_MAX_WIDTH, textWidth));
+};
+
+// Calculate node height (can expand for multi-line text)
+// useSmallFont: for CO/PO nodes with text > 150 chars
+const calculateNodeHeight = (label: string, width: number, useSmallFont: boolean = false): number => {
+    const charWidth = useSmallFont ? CHAR_WIDTH_SMALL : CHAR_WIDTH;
+    const baseHeight = useSmallFont ? NODE_BASE_HEIGHT_SMALL : NODE_BASE_HEIGHT;
+    const lineHeight = useSmallFont ? 14 : 20; // smaller line height for small font
+    
+    const charsPerLine = Math.floor((width - NODE_PADDING * 2) / charWidth);
+    const lines = Math.ceil(label.length / charsPerLine);
+    return baseHeight + Math.max(0, lines - 1) * lineHeight;
+};
+
 const createNodeTypes = (
-    onEdit: (apiId: number, currentName: string) => void,
+    onEdit: (apiId: number, currentName: string, nodeType: "cc" | "co" | "po") => void,
     onDelete: (apiId: number, currentName: string) => void
 ) => ({
     graphnode: (props: NodeProps<AppNode>) => (
@@ -100,108 +129,251 @@ const convertToNodes = (
         regScore(`po-${node.id}`, score);
     });
 
-    const nodes: Node[] = [];
-    let yOffset = 100;
+    // ========== CROSSING MINIMIZATION (Barycenter Method) ==========
+    // Build adjacency maps for edges between layers
+    const ccToCoEdges = new Map<number, number[]>(); // CC node id -> list of CO node ids
+    const coToCcEdges = new Map<number, number[]>(); // CO node id -> list of CC node ids  
+    const coToPoEdges = new Map<number, number[]>(); // CO node id -> list of PO node ids
+    const poToCoEdges = new Map<number, number[]>(); // PO node id -> list of CO node ids
 
-    // Course Content
-    data.course_contents.forEach((node, index) => {
+    // Initialize maps
+    data.course_contents.forEach(n => ccToCoEdges.set(n.id, []));
+    data.course_outcomes.forEach(n => {
+        coToCcEdges.set(n.id, []);
+        coToPoEdges.set(n.id, []);
+    });
+    data.program_outcomes.forEach(n => poToCoEdges.set(n.id, []));
+
+    // Helper to find which layer a node belongs to
+    const ccIds = new Set(data.course_contents.map(n => n.id));
+    const coIds = new Set(data.course_outcomes.map(n => n.id));
+    const poIds = new Set(data.program_outcomes.map(n => n.id));
+
+    // Process all relations to build adjacency
+    const processedRels = new Set<number>();
+    [...data.course_contents, ...data.course_outcomes, ...data.program_outcomes].forEach(node => {
+        node.relations.forEach(rel => {
+            if (processedRels.has(rel.relation_id)) return;
+            processedRels.add(rel.relation_id);
+
+            const n1 = rel.node1_id;
+            const n2 = rel.node2_id;
+
+            // CC <-> CO edge
+            if (ccIds.has(n1) && coIds.has(n2)) {
+                ccToCoEdges.get(n1)?.push(n2);
+                coToCcEdges.get(n2)?.push(n1);
+            } else if (coIds.has(n1) && ccIds.has(n2)) {
+                ccToCoEdges.get(n2)?.push(n1);
+                coToCcEdges.get(n1)?.push(n2);
+            }
+            // CO <-> PO edge
+            else if (coIds.has(n1) && poIds.has(n2)) {
+                coToPoEdges.get(n1)?.push(n2);
+                poToCoEdges.get(n2)?.push(n1);
+            } else if (poIds.has(n1) && coIds.has(n2)) {
+                coToPoEdges.get(n2)?.push(n1);
+                poToCoEdges.get(n1)?.push(n2);
+            }
+        });
+    });
+
+    // Sort CC layer by original order (as base), create index map
+    const ccOrder = data.course_contents.map((n, i) => ({ node: n, origIndex: i }));
+    const ccIndexMap = new Map<number, number>();
+    ccOrder.forEach((item, idx) => ccIndexMap.set(item.node.id, idx));
+
+    // Sort CO layer by barycenter of connected CC nodes
+    const coOrder = data.course_outcomes.map((n, i) => ({ node: n, origIndex: i }));
+    coOrder.sort((a, b) => {
+        const aConns = coToCcEdges.get(a.node.id) || [];
+        const bConns = coToCcEdges.get(b.node.id) || [];
+        
+        // Barycenter = average index of connected nodes in previous layer
+        const aBarycenter = aConns.length > 0 
+            ? aConns.reduce((sum, id) => sum + (ccIndexMap.get(id) ?? 0), 0) / aConns.length 
+            : a.origIndex;
+        const bBarycenter = bConns.length > 0 
+            ? bConns.reduce((sum, id) => sum + (ccIndexMap.get(id) ?? 0), 0) / bConns.length 
+            : b.origIndex;
+        
+        return aBarycenter - bBarycenter;
+    });
+    const coIndexMap = new Map<number, number>();
+    coOrder.forEach((item, idx) => coIndexMap.set(item.node.id, idx));
+
+    // Sort PO layer by barycenter of connected CO nodes
+    const poOrder = data.program_outcomes.map((n, i) => ({ node: n, origIndex: i }));
+    poOrder.sort((a, b) => {
+        const aConns = poToCoEdges.get(a.node.id) || [];
+        const bConns = poToCoEdges.get(b.node.id) || [];
+        
+        const aBarycenter = aConns.length > 0 
+            ? aConns.reduce((sum, id) => sum + (coIndexMap.get(id) ?? 0), 0) / aConns.length 
+            : a.origIndex;
+        const bBarycenter = bConns.length > 0 
+            ? bConns.reduce((sum, id) => sum + (coIndexMap.get(id) ?? 0), 0) / bConns.length 
+            : b.origIndex;
+        
+        return aBarycenter - bBarycenter;
+    });
+
+    // Extract sorted node arrays
+    const sortedCC = ccOrder.map(item => item.node);
+    const sortedCO = coOrder.map(item => item.node);
+    const sortedPO = poOrder.map(item => item.node);
+
+    // ========== END CROSSING MINIMIZATION ==========
+
+    // 2. Pre-calculate dimensions for all nodes in each layer (using sorted order)
+    // CC nodes: normal font
+    const ccDimensions = sortedCC.map(node => {
+        const width = calculateNodeWidth(node.name);
+        const height = calculateNodeHeight(node.name, width, false);
+        return { width, height };
+    });
+    
+    // CO nodes: use small font if text > 150 chars
+    const coDimensions = sortedCO.map(node => {
+        const width = calculateNodeWidth(node.name);
+        const useSmallFont = node.name.length > 150;
+        const height = calculateNodeHeight(node.name, width, useSmallFont);
+        return { width, height };
+    });
+    
+    // PO nodes: use small font if text > 150 chars
+    const poDimensions = sortedPO.map(node => {
+        const width = calculateNodeWidth(node.name);
+        const useSmallFont = node.name.length > 150;
+        const height = calculateNodeHeight(node.name, width, useSmallFont);
+        return { width, height };
+    });
+
+    // 3. Calculate max width per layer for alignment
+    const ccMaxWidth = ccDimensions.length > 0 ? Math.max(...ccDimensions.map(d => d.width)) : NODE_MIN_WIDTH;
+    const coMaxWidth = coDimensions.length > 0 ? Math.max(...coDimensions.map(d => d.width)) : NODE_MIN_WIDTH;
+    const poMaxWidth = poDimensions.length > 0 ? Math.max(...poDimensions.map(d => d.width)) : NODE_MIN_WIDTH;
+
+    // 4. Calculate total height per layer
+    const ccTotalHeight = ccDimensions.reduce((sum, d) => sum + d.height + VERTICAL_GAP, -VERTICAL_GAP);
+    const coTotalHeight = coDimensions.reduce((sum, d) => sum + d.height + VERTICAL_GAP, -VERTICAL_GAP);
+    const poTotalHeight = poDimensions.reduce((sum, d) => sum + d.height + VERTICAL_GAP, -VERTICAL_GAP);
+    const maxTotalHeight = Math.max(ccTotalHeight, coTotalHeight, poTotalHeight, 0);
+
+    // 5. Calculate X positions for each layer
+    // Layer 1 (CC): right-aligned within its column
+    // Layer 2 (CO): center-aligned
+    // Layer 3 (PO): left-aligned within its column
+    const layer1X = 50; // CC layer starts here
+    const layer2X = layer1X + ccMaxWidth + LAYER_GAP; // CO layer
+    const layer3X = layer2X + coMaxWidth + LAYER_GAP; // PO layer
+
+    const nodes: Node[] = [];
+
+    // 6. Position Course Contents (right-aligned within layer) - using sorted order
+    let ccStartY = (maxTotalHeight - ccTotalHeight) / 2 + 50;
+    let ccCurrentY = ccStartY;
+    sortedCC.forEach((node, index) => {
         let score = calculatedScores.get(`cc-${node.id}`);
-        // If all scores are zero, hide them (pass undefined)
         if (!hasAnyNonZeroScore) score = undefined;
+        
+        const { width, height } = ccDimensions[index];
+        // Right-align: position x so right edge aligns with ccMaxWidth
+        const xPos = layer1X + (ccMaxWidth - width);
 
         nodes.push({
             id: `cc-${node.id}`,
             type: "graphnode",
-            position: { x: 50, y: yOffset + index * 120 },
+            position: { x: xPos, y: ccCurrentY },
             draggable: false,
-            // Course Content: source (outgoing) handles on the right
             sourcePosition: Position.Right,
-            data: { label: node.name, apiId: node.id, score },
+            data: { label: node.name, apiId: node.id, score, nodeType: "cc" as const },
             style: {
                 background: "#e3f2fd",
                 border: "2px solid #1976d2",
                 borderRadius: "8px",
                 padding: "10px",
-                minWidth: "150px",
+                width: `${width}px`,
+                minHeight: `${height}px`,
             },
         });
+        
+        ccCurrentY += height + VERTICAL_GAP;
     });
 
-    // Course Outcomes
-    yOffset = 80;
-    data.course_outcomes.forEach((node, index) => {
+    // 7. Position Course Outcomes (center-aligned within layer) - using sorted order
+    let coStartY = (maxTotalHeight - coTotalHeight) / 2 + 50;
+    let coCurrentY = coStartY;
+    sortedCO.forEach((node, index) => {
         let score = calculatedScores.get(`co-${node.id}`);
         if (!hasAnyNonZeroScore) score = undefined;
+        
+        const { width, height } = coDimensions[index];
+        // Center-align: position x so node is centered in coMaxWidth
+        const xPos = layer2X + (coMaxWidth - width) / 2;
 
         nodes.push({
             id: `co-${node.id}`,
             type: "graphnode",
-            position: { x: 500, y: yOffset + index * 120 },
+            position: { x: xPos, y: coCurrentY },
             draggable: false,
-            // Course Outcome: accept incoming on left and provide outgoing on right
             targetPosition: Position.Left,
             sourcePosition: Position.Right,
-            data: { label: node.name, apiId: node.id, score },
+            data: { label: node.name, apiId: node.id, score, nodeType: "co" as const },
             style: {
                 background: "#f3e5f5",
                 border: "2px solid #7b1fa2",
                 borderRadius: "8px",
                 padding: "10px",
-                minWidth: "150px",
+                width: `${width}px`,
+                minHeight: `${height}px`,
             },
         });
+        
+        coCurrentY += height + VERTICAL_GAP;
     });
 
-    // Program Outcomes
-    yOffset = 100;
-    data.program_outcomes.forEach((node, index) => {
+    // 8. Position Program Outcomes (left-aligned within layer) - using sorted order
+    let poStartY = (maxTotalHeight - poTotalHeight) / 2 + 50;
+    let poCurrentY = poStartY;
+    sortedPO.forEach((node, index) => {
         let score = calculatedScores.get(`po-${node.id}`);
         if (!hasAnyNonZeroScore) score = undefined;
+        
+        const { width, height } = poDimensions[index];
+        // Left-align: position x at layer3X
+        const xPos = layer3X;
 
         nodes.push({
             id: `po-${node.id}`,
             type: "graphnode",
-            position: { x: 950, y: yOffset + index * 120 },
+            position: { x: xPos, y: poCurrentY },
             draggable: false,
-            // Program Outcome: only accept incoming connections (from CO)
             targetPosition: Position.Left,
-            data: { label: node.name, apiId: node.id, score },
+            data: { label: node.name, apiId: node.id, score, nodeType: "po" as const },
             style: {
                 background: "#fff3e0",
                 border: "2px solid #f57c00",
                 borderRadius: "8px",
                 padding: "10px",
-                minWidth: "150px",
+                width: `${width}px`,
+                minHeight: `${height}px`,
             },
         });
+        
+        poCurrentY += height + VERTICAL_GAP;
     });
 
     return nodes;
 };
 
-// Helper functions for geometric overlap detection
-const getMidpoint = (p1: {x:number, y:number}, p2: {x:number, y:number}) => {
-    return { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-};
-
-const dist = (p1: {x:number, y:number}, p2: {x:number, y:number}) => {
-    return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
-};
-
 // Helper function to convert API relations to React Flow edges
-const convertToEdges = (data: GetNodesResponse, nodes: Node[]): Edge[] => {
+const convertToEdges = (data: GetNodesResponse): Edge[] => {
     const edges: Edge[] = [];
     const processedRelations = new Set<number>();
 
-    // Need map of node positions for clustering
-    const nodePosMap = new Map<string, {x:number, y:number}>();
-    nodes.forEach(n => nodePosMap.set(n.id, n.position));
-
-    // Group edges by layer for coloring
-    const ccEdges: any[] = [];
-    const coEdges: any[] = [];
+    let colorIndex = 0;
     
-    // Preliminary edge collection
     const allNodes = [
         ...data.course_contents, 
         ...data.course_outcomes, 
@@ -218,131 +390,33 @@ const convertToEdges = (data: GetNodesResponse, nodes: Node[]): Edge[] => {
             if (sourcePrefix && targetPrefix) {
                 const srcId = `${sourcePrefix}-${rel.node1_id}`;
                 const tgtId = `${targetPrefix}-${rel.node2_id}`;
+                const color = DISTINCT_COLORS[colorIndex % DISTINCT_COLORS.length];
+                colorIndex++;
 
-                const edgeObj = {
+                edges.push({
                     id: `e-${rel.relation_id}`,
                     source: srcId,
                     target: tgtId,
-                    weight: rel.weight,
-                    relationId: rel.relation_id
-                };
-                if (sourcePrefix === 'cc') ccEdges.push(edgeObj);
-                else coEdges.push(edgeObj);
+                    label: `${rel.weight}`,
+                    data: { relationId: rel.relation_id, weight: rel.weight, color },
+                    animated: true,
+                    style: {
+                        stroke: color,
+                        strokeWidth: 2,
+                    },
+                    labelStyle: {
+                        fill: color,
+                        fontWeight: 700,
+                        fontSize: 14,
+                    },
+                    labelBgStyle: {
+                        fill: "white",
+                        fillOpacity: 0.9,
+                    },
+                });
             }
         });
     });
-
-    const processLayer = (layerEdges: any[], colorOffset: number) => {
-        // 1. Assign colors
-        layerEdges.forEach((e, i) => {
-            e.color = DISTINCT_COLORS[(i + colorOffset) % DISTINCT_COLORS.length];
-        });
-
-        // 2. Detect overlaps
-        // Map edge ID -> midpoint
-        const midpoints = new Map<string, {x:number, y:number}>();
-        layerEdges.forEach(e => {
-            const p1 = nodePosMap.get(e.source);
-            const p2 = nodePosMap.get(e.target);
-            if (p1 && p2) {
-                midpoints.set(e.id, getMidpoint(p1, p2));
-            }
-        });
-
-        // Cluster edges
-        const clusters: string[][] = [];
-        const assigned = new Set<string>();
-        const OVERLAP_THRESHOLD = 30; // pixels
-
-        layerEdges.forEach(e => {
-            if (assigned.has(e.id)) return;
-            const mp = midpoints.get(e.id);
-            if (!mp) {
-                clusters.push([e.id]);
-                assigned.add(e.id);
-                return;
-            }
-
-            const cluster = [e.id];
-            assigned.add(e.id);
-
-            // Find overlapping neighbors
-            layerEdges.forEach(other => {
-                if (assigned.has(other.id)) return;
-                const mpOther = midpoints.get(other.id);
-                if (mpOther && dist(mp, mpOther) < OVERLAP_THRESHOLD) {
-                    cluster.push(other.id);
-                    assigned.add(other.id);
-                }
-            });
-            clusters.push(cluster);
-        });
-
-        // Build edges
-        clusters.forEach(cluster => {
-             if (cluster.length === 1) {
-                 const eDef = layerEdges.find(le => le.id === cluster[0]);
-                 edges.push(createEdge(eDef, eDef.color));
-             } else {
-                 // Multiple edges overlap
-                 const leaderId = cluster[0];
-                 
-                 const clusterLabel = cluster.map(id => {
-                    const e = layerEdges.find(le => le.id === id);
-                    return e ? e.weight : '';
-                 }).join(", ");
-
-                 cluster.forEach((edgeId, idx) => {
-                     const eDef = layerEdges.find(le => le.id === edgeId);
-                     const isLeader = idx === 0;
-                     
-                     edges.push({
-                         ...createEdge(eDef, eDef.color),
-                         label: isLeader ? clusterLabel : "", // Only leader shows label
-                         zIndex: isLeader ? 100 : 1, // Leader on top
-                         style: { 
-                             stroke: eDef.color, 
-                             strokeWidth: 2,
-                         },
-                         labelStyle: isLeader ? { 
-                            fill: "black", fontWeight: 900, fontSize: 14 
-                         } : { fill: "transparent" }, // Label style tweak
-                         data: { 
-                             relationId: eDef.relationId, 
-                             weight: eDef.weight,
-                             isGroup: true,
-                             groupMembers: cluster // Store all IDs in group
-                         }
-                     });
-                 });
-             }
-        });
-    };
-
-    const createEdge = (def: any, color: string): Edge => ({
-        id: def.id,
-        source: def.source,
-        target: def.target,
-        label: `${def.weight}`,
-        data: { relationId: def.relationId, weight: def.weight },
-        animated: true,
-        style: {
-            stroke: color,
-            strokeWidth: 2,
-        },
-        labelStyle: {
-            fill: color,
-            fontWeight: 700,
-            fontSize: 14,
-        },
-        labelBgStyle: {
-            fill: "white",
-            fillOpacity: 0.9,
-        },
-    });
-
-    processLayer(ccEdges, 0);
-    processLayer(coEdges, 5); // Offset colors for variety
 
     return edges;
 };
@@ -408,11 +482,18 @@ export default function MainGraph() {
     const [nodeEditModalOpen, setNodeEditModalOpen] = useState(false);
     const [editingNodeId, setEditingNodeId] = useState<number | null>(null);
     const [editingNodeName, setEditingNodeName] = useState("");
+    const [editingNodeType, setEditingNodeType] = useState<"cc" | "co" | "po">("cc");
     const [newNodeName, setNewNodeName] = useState("");
-    const NAME_MAX = 60;
+    
+    // Different max lengths: 60 for CC, 300 for CO/PO
+    const NAME_MAX = editingNodeType === "cc" ? 60 : 300;
 
     // Node delete modal state
     const [nodeDeleteModalOpen, setNodeDeleteModalOpen] = useState(false);
+
+    // Highlight state - tracks which nodes should be highlighted
+    const [highlightedNodes, setHighlightedNodes] = useState<Set<string>>(new Set());
+    const [highlightedEdges, setHighlightedEdges] = useState<Set<string>>(new Set());
 
     // Load graph data whenever courseId changes
     useEffect(() => {
@@ -426,7 +507,7 @@ export default function MainGraph() {
 
                 // Initial render without student-specific values (we'll fetch them next)
                 const newNodes = convertToNodes(data, studentResults);
-                const newEdges = convertToEdges(data, newNodes);
+                const newEdges = convertToEdges(data);
 
                 setNodes(newNodes);
                 setEdges(newEdges);
@@ -448,7 +529,7 @@ export default function MainGraph() {
                     const nodesWithStudent = convertToNodes(data, sr);
                     setNodes(nodesWithStudent);
                 // Rebuild edges with nodes (for positions)
-                setEdges(convertToEdges(data, nodesWithStudent));
+                setEdges(convertToEdges(data));
             } catch (err) {
                 // If student results fetch fails, log but keep showing the base graph
                 console.error("Failed to fetch student results:", err);
@@ -480,7 +561,7 @@ export default function MainGraph() {
             const newNodes = convertToNodes(data, detail);
             setNodes(newNodes);
             // Rebuild edges to ensure positions and overlays are consistent
-            setEdges(convertToEdges(data, newNodes));
+            setEdges(convertToEdges(data));
         } catch (err) {
             console.error("Failed to apply student results to nodes", err);
         }
@@ -541,13 +622,6 @@ export default function MainGraph() {
 
     // Handle edge click - open modal to edit
     const onEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
-        // Handle grouped edges
-        if (edge.data?.isGroup && Array.isArray(edge.data.groupMembers) && edge.data.groupMembers.length > 0) {
-            setGroupedEdgesList(edge.data.groupMembers as string[]);
-            setGroupModalOpen(true);
-            return;
-        }
-
         setModalMode("edit");
         setEditingEdge(edge);
         const currentWeight = (edge.data as { weight?: number })?.weight;
@@ -556,9 +630,79 @@ export default function MainGraph() {
         setWeightModalOpen(true);
     }, []);
 
-    // Group Modal State
-    const [groupModalOpen, setGroupModalOpen] = useState(false);
-    const [groupedEdgesList, setGroupedEdgesList] = useState<string[]>([]);
+    // Handle node click for highlighting connected nodes
+    const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
+        // If clicking the same node, clear highlight
+        if (highlightedNodes.has(node.id) && highlightedNodes.size > 0) {
+            setHighlightedNodes(new Set());
+            setHighlightedEdges(new Set());
+            return;
+        }
+
+        const connectedNodes = new Set<string>([node.id]);
+        const connectedEdges = new Set<string>();
+
+        // Build adjacency maps
+        const leftNeighbors = new Map<string, { nodeId: string; edgeId: string }[]>(); // target -> sources
+        const rightNeighbors = new Map<string, { nodeId: string; edgeId: string }[]>(); // source -> targets
+
+        edges.forEach((edge) => {
+            // Left neighbors: who points TO this node (sources)
+            if (!leftNeighbors.has(edge.target)) {
+                leftNeighbors.set(edge.target, []);
+            }
+            leftNeighbors.get(edge.target)!.push({ nodeId: edge.source, edgeId: edge.id });
+
+            // Right neighbors: who this node points TO (targets)
+            if (!rightNeighbors.has(edge.source)) {
+                rightNeighbors.set(edge.source, []);
+            }
+            rightNeighbors.get(edge.source)!.push({ nodeId: edge.target, edgeId: edge.id });
+        });
+
+        // Traverse left (sources) - recursive
+        const traverseLeft = (nodeId: string) => {
+            const neighbors = leftNeighbors.get(nodeId) || [];
+            for (const { nodeId: neighborId, edgeId } of neighbors) {
+                if (!connectedNodes.has(neighborId)) {
+                    connectedNodes.add(neighborId);
+                    connectedEdges.add(edgeId);
+                    traverseLeft(neighborId); // Continue leftward
+                } else {
+                    connectedEdges.add(edgeId); // Still highlight the edge
+                }
+            }
+        };
+
+        // Traverse right (targets) - recursive
+        const traverseRight = (nodeId: string) => {
+            const neighbors = rightNeighbors.get(nodeId) || [];
+            for (const { nodeId: neighborId, edgeId } of neighbors) {
+                if (!connectedNodes.has(neighborId)) {
+                    connectedNodes.add(neighborId);
+                    connectedEdges.add(edgeId);
+                    traverseRight(neighborId); // Continue rightward
+                } else {
+                    connectedEdges.add(edgeId); // Still highlight the edge
+                }
+            }
+        };
+
+        // Start traversal from clicked node
+        traverseLeft(node.id);
+        traverseRight(node.id);
+
+        setHighlightedNodes(connectedNodes);
+        setHighlightedEdges(connectedEdges);
+    }, [edges, highlightedNodes]);
+
+    // Handle pane click to clear highlights
+    const onPaneClick = useCallback(() => {
+        if (highlightedNodes.size > 0) {
+            setHighlightedNodes(new Set());
+            setHighlightedEdges(new Set());
+        }
+    }, [highlightedNodes]);
 
 
     // Submit weight (create or edit)
@@ -674,9 +818,10 @@ export default function MainGraph() {
     };
 
     // Handle node edit - open modal
-    const handleEditNode = useCallback((apiId: number, currentName: string) => {
+    const handleEditNode = useCallback((apiId: number, currentName: string, nodeType: "cc" | "co" | "po") => {
         setEditingNodeId(apiId);
         setEditingNodeName(currentName);
+        setEditingNodeType(nodeType);
         setNewNodeName(currentName);
         setModalError(null);
         setNodeEditModalOpen(true);
@@ -689,29 +834,20 @@ export default function MainGraph() {
 
         const trimmed = newNodeName.trim();
         if (!trimmed) {
-            setModalError("Name cannot be empty");
+            setModalError("Description cannot be empty");
             return;
         }
         if (trimmed.length > NAME_MAX) {
-            setModalError(`Name must be at most ${NAME_MAX} characters`);
+            setModalError(`Description must be at most ${NAME_MAX} characters`);
             return;
         }
 
         setSaving(true);
         try {
             await apiUpdateNode(editingNodeId, trimmed);
-            setNodes((nds) =>
-                nds.map((node) => {
-                    if (node.data?.apiId === editingNodeId) {
-                        return {
-                            ...node,
-                            data: { ...node.data, label: trimmed },
-                        } as Node;
-                    }
-                    return node;
-                })
-            );
             setNodeEditModalOpen(false);
+            // Reload graph to update layout
+            window.dispatchEvent(new Event("scoresUpdated"));
         } catch (err) {
             const msg = err instanceof Error ? err.message : "Unknown error";
             setModalError(`Failed to rename: ${msg}`);
@@ -720,33 +856,18 @@ export default function MainGraph() {
         }
     };
 
-    // Helper to open edit for a specific edge from the group list
-    const editGroupedEdge = useCallback((edgeId: string) => {
-         const edge = edges.find(e => e.id === edgeId);
-         if (edge) {
-             setGroupModalOpen(false);
-             setModalMode("edit");
-             setEditingEdge(edge);
-             const currentWeight = (edge.data as { weight?: number })?.weight;
-             setWeightValue(typeof currentWeight === "number" ? currentWeight : 3);
-             setModalError(null);
-             setWeightModalOpen(true);
-         }
-    }, [edges]);
-
-    const getGroupedEdgeInfo = (edgeId: string) => {
-        const edge = edges.find(e => e.id === edgeId);
-        if (!edge) return { source: "Unknown", target: "Unknown", weight: 0, color: '#000' };
+    // Helper to get edge info for color indicator
+    const getEdgeInfo = () => {
+        if (!editingEdge) return null;
         
-        // Find source and target node names
-        const sourceNode = nodes.find(n => n.id === edge.source);
-        const targetNode = nodes.find(n => n.id === edge.target);
+        const sourceNode = nodes.find(n => n.id === editingEdge.source);
+        const targetNode = nodes.find(n => n.id === editingEdge.target);
+        const color = (editingEdge.data as any)?.color || (editingEdge.style?.stroke as string) || '#000';
         
         return {
             source: String(sourceNode?.data.label || "Unknown"),
             target: String(targetNode?.data.label || "Unknown"),
-            weight: Number((edge.data as any)?.weight || 0),
-            color: (edge.style?.stroke as string) || '#000'
+            color
         };
     };
 
@@ -793,6 +914,38 @@ export default function MainGraph() {
         [handleEditNode, handleDeleteNode]
     );
 
+    // Apply highlighting styles to nodes
+    const styledNodes = useMemo(() => {
+        if (highlightedNodes.size === 0) return nodes;
+        
+        return nodes.map((node) => ({
+            ...node,
+            style: {
+                ...node.style,
+                opacity: highlightedNodes.has(node.id) ? 1 : 0.2,
+                transition: 'opacity 0.2s ease-in-out',
+            },
+        }));
+    }, [nodes, highlightedNodes]);
+
+    // Apply highlighting styles to edges
+    const styledEdges = useMemo(() => {
+        if (highlightedEdges.size === 0) return edges;
+        
+        return edges.map((edge) => ({
+            ...edge,
+            style: {
+                ...edge.style,
+                opacity: highlightedEdges.has(edge.id) ? 1 : 0.1,
+                transition: 'opacity 0.2s ease-in-out',
+            },
+            labelStyle: {
+                ...edge.labelStyle,
+                opacity: highlightedEdges.has(edge.id) ? 1 : 0.1,
+            },
+        }));
+    }, [edges, highlightedEdges]);
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-full">
@@ -812,12 +965,14 @@ export default function MainGraph() {
     return (
         <>
             <ReactFlow
-                nodes={nodes}
-                edges={edges}
+                nodes={styledNodes}
+                edges={styledEdges}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
                 onEdgeClick={onEdgeClick}
+                onNodeClick={onNodeClick}
+                onPaneClick={onPaneClick}
                 nodeTypes={nodeTypes}
                 proOptions={{ hideAttribution: true }}
                 fitView
@@ -829,43 +984,6 @@ export default function MainGraph() {
 
             {/* Weight Modal */}
             <Modal
-                opened={groupModalOpen}
-                onClose={() => setGroupModalOpen(false)}
-                title="Overlapping Edges"
-                centered
-                size="md"
-            >
-                <Text size="sm" mb="md" c="dimmed">
-                    Select an edge to edit its weight:
-                </Text>
-                <div className="space-y-2">
-                    {groupedEdgesList.map(edgeId => {
-                        const info = getGroupedEdgeInfo(edgeId);
-                        return (
-                            <div 
-                                key={edgeId} 
-                                className={`p-3 border rounded-md cursor-pointer hover:bg-gray-50 flex justify-between items-center`}
-                                style={{ borderLeft: `4px solid ${info.color}` }}
-                                onClick={() => editGroupedEdge(edgeId)}
-                            >
-                                <div>
-                                    <div className="text-sm font-semibold">{info.source} → {info.target}</div>
-                                </div>
-                                <div className="font-bold bg-gray-200 px-2 py-1 rounded text-xs">
-                                    Weight: {info.weight}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-                <Group justify="flex-end" mt="md">
-                    <Button variant="default" onClick={() => setGroupModalOpen(false)}>
-                        Close
-                    </Button>
-                </Group>
-            </Modal>
-
-            <Modal
                 opened={weightModalOpen}
                 onClose={closeWeightModal}
                 title={
@@ -876,6 +994,28 @@ export default function MainGraph() {
                 centered
             >
                 <div className="space-y-4">
+                    {/* Color indicator for edit mode */}
+                    {modalMode === "edit" && editingEdge && (() => {
+                        const info = getEdgeInfo();
+                        if (!info) return null;
+                        return (
+                            <div 
+                                className="p-3 border rounded-md flex items-center gap-3"
+                                style={{ borderLeft: `4px solid ${info.color}` }}
+                            >
+                                <div 
+                                    className="w-4 h-4 rounded-full shrink-0"
+                                    style={{ backgroundColor: info.color }}
+                                />
+                                <div className="text-sm">
+                                    <span className="font-medium">{info.source}</span>
+                                    <span className="text-gray-400 mx-2">→</span>
+                                    <span className="font-medium">{info.target}</span>
+                                </div>
+                            </div>
+                        );
+                    })()}
+                    
                     <Text size="sm" c="dimmed">
                         Choose a weight from 1 (weak) to 5 (strong).
                     </Text>
@@ -926,7 +1066,7 @@ export default function MainGraph() {
             <Modal
                 opened={nodeEditModalOpen}
                 onClose={() => setNodeEditModalOpen(false)}
-                title="Rename Node"
+                title="Edit Node"
                 centered
             >
                 <div className="space-y-4">
@@ -938,13 +1078,16 @@ export default function MainGraph() {
                             {modalError}
                         </Text>
                     )}
-                    <TextInput
-                        label={`Name (max ${NAME_MAX} chars)`}
+                    <Textarea
+                        label={`Description (max ${NAME_MAX} chars)`}
                         value={newNodeName}
                         onChange={(e) => setNewNodeName(e.currentTarget.value)}
                         maxLength={NAME_MAX}
-                        placeholder="New name"
+                        placeholder="New description"
                         autoFocus
+                        autosize
+                        minRows={2}
+                        maxRows={4}
                         rightSection={
                             <Text size="xs" c="dimmed">
                                 {newNodeName.length}/{NAME_MAX}

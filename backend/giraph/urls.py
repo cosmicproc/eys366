@@ -19,4 +19,8 @@ urlpatterns = [
     path("create_program_outcome/", views.CreateProgramOutcome.as_view()),
     path("update_program_outcome/", views.UpdateProgramOutcome.as_view()),
     path("delete_program_outcome/", views.DeleteProgramOutcome.as_view()),
+    # Syllabus import endpoints
+    path("parse_syllabus/", views.ParseSyllabus.as_view()),
+    path("apply_syllabus_import/", views.ApplySyllabusImport.as_view()),
+    path("clear_course_nodes/", views.ClearCourseNodes.as_view()),
 ]

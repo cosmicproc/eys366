@@ -4,7 +4,7 @@ from django.http import JsonResponse
 from programs.models import Program
 from rest_framework import status
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -29,8 +29,7 @@ class NewNode(APIView):
     Body: {"name": str, "layer": "course_content"|"course_outcome"|"program_outcome", "course_id": str (UUID)}
     """
 
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         ser = NewNodeSerializer(data=request.data)
@@ -71,8 +70,7 @@ class NewRelation(APIView):
     Validation: only cc→co or co→cp connections are allowed.
     """
 
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         ser = NewRelationSerializer(data=request.data)
@@ -102,8 +100,7 @@ class GetNodes(APIView):
     Program outcomes are always included regardless of course filter.
     """
 
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         course_id = request.query_params.get("courseId")
@@ -126,8 +123,7 @@ class UpdateNode(APIView):
     Body: {"node_id": int, "name": str}
     """
 
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         ser = UpdateNodeSerializer(data=request.data)
@@ -160,8 +156,7 @@ class UpdateRelation(APIView):
     Body: {"relation_id": int, "weight": 1|2|3|4|5}
     """
 
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         ser = UpdateRelationSerializer(data=request.data)
@@ -188,8 +183,7 @@ class DeleteNode(APIView):
     Body: {"node_id": int}
     """
 
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def delete(self, request):
         node_id = request.data.get("node_id")
@@ -219,8 +213,7 @@ class DeleteRelation(APIView):
     Body: {"relation_id": int}
     """
 
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def delete(self, request):
         relation_id = request.data.get("relation_id")
@@ -250,8 +243,7 @@ class GetProgramOutcomes(APIView):
     Returns all program outcomes (global, not course-specific)
     """
 
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         outcomes = list(
@@ -372,9 +364,8 @@ class ResetScores(APIView):
     def post(self, request):
         course_id = request.data.get("course_id")
 
-        nodes_qs = Node.objects.filter(
-            layer=LayerChoices.COURSE_CONTENT, score__isnull=False
-        )
+        # Reset all course content nodes (optionally filtered by course)
+        nodes_qs = Node.objects.filter(layer=LayerChoices.COURSE_CONTENT)
         if course_id:
             nodes_qs = nodes_qs.filter(course_id=course_id)
 
@@ -385,10 +376,13 @@ class ResetScores(APIView):
         nodes_qs.update(score=None)
 
         # Also reset CourseContent scores
+        from outcomes.models import CourseContent
         if node_names:
-            from outcomes.models import CourseContent
-
             CourseContent.objects.filter(name__in=node_names).update(score=None)
+        else:
+            # If no course_id filter, reset all CourseContent scores
+            if not course_id:
+                CourseContent.objects.all().update(score=None)
 
         try:
             data = get_full_graph(course_id)
@@ -410,8 +404,7 @@ class CreateProgramOutcome(APIView):
     Only department heads can create program outcomes
     """
 
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         name = request.data.get("name", "").strip()
@@ -444,8 +437,7 @@ class UpdateProgramOutcome(APIView):
     Body: {"id": int, "name": str}
     """
 
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def put(self, request):
         outcome_id = request.data.get("id")
@@ -479,8 +471,7 @@ class UpdateProgramOutcome(APIView):
 class CalculateStudentResults(APIView):
     """GET /api/giraph/calculate_student_results/?student_id=XXX&courseId=..."""
 
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         student_id = request.query_params.get("student_id")
@@ -572,8 +563,7 @@ class DeleteProgramOutcome(APIView):
     Only department heads can delete program outcomes
     """
 
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def delete(self, request):
         outcome_id = request.data.get("outcome_id")
@@ -598,3 +588,240 @@ class DeleteProgramOutcome(APIView):
             {"message": "Program outcome deleted."},
             status=status.HTTP_200_OK,
         )
+
+
+class ParseSyllabus(APIView):
+    """POST /api/giraph/parse_syllabus/
+    
+    Upload a PDF syllabus and extract course structure using LLM.
+    Returns extracted course contents, outcomes, and suggested relations.
+    The user can review and confirm before applying.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if "file" not in request.FILES:
+            return Response(
+                {"detail": "No file uploaded. Please upload a PDF file."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        uploaded_file = request.FILES["file"]
+        
+        # Validate file type
+        if not uploaded_file.name.lower().endswith(".pdf"):
+            return Response(
+                {"detail": "Only PDF files are supported."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        # Read file bytes
+        pdf_bytes = uploaded_file.read()
+        
+        try:
+            from .syllabus_service import process_syllabus
+            result = process_syllabus(pdf_bytes)
+            
+            return Response({
+                "message": "Syllabus parsed successfully. Please review and confirm.",
+                "data": result,
+            }, status=status.HTTP_200_OK)
+            
+        except Exception:
+            return Response(
+                {"detail": "Unable to process the syllabus. Please ensure the file is a valid PDF and try again."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class ApplySyllabusImport(APIView):
+    """POST /api/giraph/apply_syllabus_import/
+    
+    Apply the extracted syllabus structure after user confirmation.
+    Creates nodes and relations in the database.
+    
+    Body: {
+        "course_id": UUID,
+        "course_contents": [{"name": str, "weight": int}],
+        "course_outcomes": [{"name": str}],
+        "relations": [{"content_index": int, "outcome_index": int, "strength": int}]
+    }
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        course_id = request.data.get("course_id")
+        course_contents = request.data.get("course_contents", [])
+        course_outcomes = request.data.get("course_outcomes", [])
+        relations = request.data.get("relations", [])
+        
+        if not course_id:
+            return Response(
+                {"detail": "course_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        # Verify course exists
+        try:
+            course = Program.objects.get(pk=course_id)
+        except Program.DoesNotExist:
+            return Response(
+                {"detail": f"Course {course_id} not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        
+        created_nodes = {"course_contents": [], "course_outcomes": []}
+        created_relations = []
+        
+        # Create course content nodes
+        cc_node_map = {}  # index -> Node
+        for i, cc in enumerate(course_contents):
+            name = cc.get("name", "").strip()
+            if not name:
+                continue
+            
+            # Check if node already exists
+            existing = Node.objects.filter(
+                name=name, 
+                layer=LayerChoices.COURSE_CONTENT, 
+                course=course
+            ).first()
+            
+            if existing:
+                cc_node_map[i] = existing
+            else:
+                node = Node.objects.create(
+                    name=name,
+                    layer=LayerChoices.COURSE_CONTENT,
+                    course=course,
+                )
+                cc_node_map[i] = node
+                created_nodes["course_contents"].append({
+                    "id": node.id,
+                    "name": node.name,
+                })
+        
+        # Create course outcome nodes
+        co_node_map = {}  # index -> Node
+        for i, co in enumerate(course_outcomes):
+            name = co.get("name", "").strip()
+            if not name:
+                continue
+            
+            # Check if node already exists
+            existing = Node.objects.filter(
+                name=name, 
+                layer=LayerChoices.COURSE_OUTCOME, 
+                course=course
+            ).first()
+            
+            if existing:
+                co_node_map[i] = existing
+            else:
+                node = Node.objects.create(
+                    name=name,
+                    layer=LayerChoices.COURSE_OUTCOME,
+                    course=course,
+                )
+                co_node_map[i] = node
+                created_nodes["course_outcomes"].append({
+                    "id": node.id,
+                    "name": node.name,
+                })
+        
+        # Create relations (CC -> CO)
+        for rel in relations:
+            ci = rel.get("content_index")
+            oi = rel.get("outcome_index")
+            strength = rel.get("strength", 3)
+            
+            if ci not in cc_node_map or oi not in co_node_map:
+                continue
+            
+            cc_node = cc_node_map[ci]
+            co_node = co_node_map[oi]
+            
+            # Check if relation already exists
+            existing_rel = Relation.objects.filter(
+                node1=cc_node,
+                node2=co_node,
+            ).first()
+            
+            if existing_rel:
+                # Update weight if different
+                if existing_rel.weight != strength:
+                    existing_rel.weight = strength
+                    existing_rel.save(update_fields=["weight"])
+            else:
+                try:
+                    relation = Relation.objects.create(
+                        node1=cc_node,
+                        node2=co_node,
+                        weight=min(5, max(1, int(strength))),
+                    )
+                    created_relations.append({
+                        "id": relation.id,
+                        "from": cc_node.name,
+                        "to": co_node.name,
+                        "weight": relation.weight,
+                    })
+                except IntegrityError:
+                    # Relation already exists, skip
+                    pass
+        
+        return Response({
+            "message": "Syllabus import applied successfully.",
+            "created_nodes": created_nodes,
+            "created_relations": created_relations,
+        }, status=status.HTTP_201_CREATED)
+
+
+class ClearCourseNodes(APIView):
+    """POST /api/giraph/clear_course_nodes/
+    
+    Delete all course content and course outcome nodes for a specific course.
+    This also removes all relations connected to those nodes.
+    
+    Body: {"course_id": UUID}
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        course_id = request.data.get("course_id")
+        
+        if not course_id:
+            return Response(
+                {"detail": "course_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        # Verify course exists
+        try:
+            course = Program.objects.get(pk=course_id)
+        except Program.DoesNotExist:
+            return Response(
+                {"detail": f"Course {course_id} not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        
+        # Delete all course content and course outcome nodes for this course
+        # Relations are automatically deleted via CASCADE
+        deleted_cc = Node.objects.filter(
+            course=course,
+            layer=LayerChoices.COURSE_CONTENT
+        ).delete()
+        
+        deleted_co = Node.objects.filter(
+            course=course,
+            layer=LayerChoices.COURSE_OUTCOME
+        ).delete()
+        
+        return Response({
+            "message": "Course nodes cleared successfully.",
+            "deleted_course_contents": deleted_cc[0],
+            "deleted_course_outcomes": deleted_co[0],
+        }, status=status.HTTP_200_OK)
+

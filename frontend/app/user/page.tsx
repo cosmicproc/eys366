@@ -1,14 +1,14 @@
 "use client";
 
 import {
-  Button,
-  Container,
-  Group,
-  Paper,
-  PasswordInput,
-  Stack,
-  TextInput,
-  Title,
+    Button,
+    Container,
+    Group,
+    Paper,
+    PasswordInput,
+    Stack,
+    TextInput,
+    Title,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
@@ -45,11 +45,6 @@ export default function UserSettings() {
   });
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.push("/login");
-      return;
-    }
-
     if (user) {
       form.setValues({
         username: user.username || "",
@@ -58,7 +53,7 @@ export default function UserSettings() {
         email: user.email || "",
       });
     }
-  }, [user, loading, router]);
+  }, [user]);
 
   const handleUpdateProfile = async (values: typeof form.values) => {
     if (!user) return;

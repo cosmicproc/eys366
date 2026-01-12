@@ -4,3 +4,5 @@ django
 djangorestframework
 django-cors-headers
 requests
+pymupdf4llm
+openai

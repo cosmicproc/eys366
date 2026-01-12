@@ -775,3 +775,88 @@ export async function resetPassword(
 
     return response.json();
 }
+
+// --- Syllabus Import Types and Functions ---
+
+export interface SyllabusContent {
+    name: string;
+}
+
+export interface SyllabusOutcome {
+    name: string;
+}
+
+export interface ParseSyllabusResponse {
+    message: string;
+    data: {
+        course_contents: SyllabusContent[];
+        course_outcomes: SyllabusOutcome[];
+        raw_text: string;
+    };
+}
+
+export interface ApplySyllabusResponse {
+    message: string;
+    created_nodes: {
+        course_contents: { id: number; name: string }[];
+        course_outcomes: { id: number; name: string }[];
+    };
+}
+
+export async function parseSyllabus(file: File): Promise<ParseSyllabusResponse> {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch(`${getApiBase()}/parse_syllabus/`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+            ...getAuthHeaders(),
+        },
+        body: formData,
+    });
+
+    return handleResponse<ParseSyllabusResponse>(response);
+}
+
+export async function applySyllabusImport(
+    courseId: string,
+    courseContents: SyllabusContent[],
+    courseOutcomes: SyllabusOutcome[]
+): Promise<ApplySyllabusResponse> {
+    const response = await fetch(`${getApiBase()}/apply_syllabus_import/`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+        },
+        body: JSON.stringify({
+            course_id: courseId,
+            course_contents: courseContents,
+            course_outcomes: courseOutcomes,
+        }),
+    });
+
+    return handleResponse<ApplySyllabusResponse>(response);
+}
+
+export interface ClearCourseNodesResponse {
+    message: string;
+    deleted_course_contents: number;
+    deleted_course_outcomes: number;
+}
+
+export async function clearCourseNodes(courseId: string): Promise<ClearCourseNodesResponse> {
+    const response = await fetch(`${getApiBase()}/clear_course_nodes/`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ course_id: courseId }),
+    });
+
+    return handleResponse<ClearCourseNodesResponse>(response);
+}

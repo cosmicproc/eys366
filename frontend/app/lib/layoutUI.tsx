@@ -3,16 +3,48 @@
 import { Avatar, Button, Group, Menu, Text } from "@mantine/core";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "./AuthContext";
-import NewItemButton from "./NewItemButton";
+import GraphOptionsMenu from "./GraphOptionsMenu";
+import ProtectedRoute from "./ProtectedRoute";
 import UploadCSVButton from "./UploadCSVButton";
+import UploadSyllabusButton from "./UploadSyllabusButton";
 import { applyScores, resetScores } from "./apiClient";
 
 interface Course {
     id: string;
     name: string;
+}
+
+// Wrapper component to handle courseId extraction for syllabus import
+function SyllabusImportWrapper({ 
+    externalOpen, 
+    onExternalClose 
+}: { 
+    externalOpen: boolean; 
+    onExternalClose: () => void;
+}) {
+    const searchParams = useSearchParams();
+    const courseId = searchParams.get("courseId");
+
+    const handleImportComplete = () => {
+        // Notify graph area to reload data
+        window.dispatchEvent(new Event("scoresUpdated"));
+    };
+
+    if (!courseId) {
+        return null;
+    }
+
+    return (
+        <UploadSyllabusButton
+            courseId={courseId}
+            onImportComplete={handleImportComplete}
+            externalOpen={externalOpen}
+            onExternalClose={onExternalClose}
+        />
+    );
 }
 
 function HeaderContent() {
@@ -21,6 +53,9 @@ function HeaderContent() {
     const pathname = usePathname();
     const [courses, setCourses] = useState<Course[]>([]);
     const [loadingCourses, setLoadingCourses] = useState(false);
+    
+    // Syllabus import modal state (controlled from GraphOptionsMenu)
+    const [syllabusModalOpen, setSyllabusModalOpen] = useState(false);
 
     // Load courses for both heads and lecturers
     useEffect(() => {
@@ -150,7 +185,11 @@ function HeaderContent() {
                       {(user.role === "head" || user.role === "lecturer") && (
                          <> 
                             <Suspense fallback={null}>
-                                <NewItemButton />
+                                <GraphOptionsMenu
+                                    onOpenSyllabusImport={() => setSyllabusModalOpen(true)}
+                                    onClearComplete={() => window.dispatchEvent(new Event("scoresUpdated"))}
+                                    onNodeCreated={() => window.dispatchEvent(new Event("scoresUpdated"))}
+                                />
                             </Suspense>
                             <Suspense fallback={null}>
                                 <UploadCSVButton
@@ -158,6 +197,11 @@ function HeaderContent() {
                                     onReset={handleResetScores}
                             />
                             </Suspense>
+                            {/* Syllabus import modal - controlled from GraphOptionsMenu */}
+                            <SyllabusImportWrapper 
+                                externalOpen={syllabusModalOpen}
+                                onExternalClose={() => setSyllabusModalOpen(false)}
+                            />
                          </>
                       )}
                       </div>
@@ -291,10 +335,12 @@ export default function RootUILayout({
 }>) {
     return (
         <AuthProvider>
-            <div className="flex flex-col flex-grow h-screen relative">
-                <HeaderContent />
-                {children}
-            </div>
+            <ProtectedRoute>
+                <div className="flex flex-col grow h-screen relative">
+                    <HeaderContent />
+                    {children}
+                </div>
+            </ProtectedRoute>
         </AuthProvider>
     );
 }

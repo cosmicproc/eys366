@@ -21,7 +21,7 @@ interface CSVData {
 
 interface UploadCSVButtonProps {
     onApplyValues: (values: Record<string, number>, studentId?: string) => void;
-    onReset?: () => void;
+    onReset?: () => void | Promise<void>;
 }
 
 export default function UploadCSVButton({
@@ -439,9 +439,9 @@ export default function UploadCSVButton({
                             <Button
                                 variant="subtle"
                                 color="red"
-                                onClick={() => {
-                                    onReset();
+                                onClick={async () => {
                                     setModalOpen(false);
+                                    await onReset();
                                 }}
                             >
                                 Reset Scores

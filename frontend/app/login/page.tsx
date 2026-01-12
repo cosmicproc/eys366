@@ -1,23 +1,23 @@
 "use client";
 
 import {
+  Anchor,
   Button,
   Card,
   Container,
-  Text,
-  Title,
-  Stack,
-  TextInput,
-  PasswordInput,
-  Avatar,
-  Anchor,
   Modal,
+  PasswordInput,
+  Stack,
+  Text,
+  TextInput,
+  Title
 } from "@mantine/core";
+import { IconLock, IconUser } from "@tabler/icons-react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useAuth } from "../lib/AuthContext";
-import { IconSchool, IconUser, IconLock } from "@tabler/icons-react";
 import { useState } from "react";
 import { requestPasswordReset } from "../lib/apiClient";
+import { useAuth } from "../lib/AuthContext";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -61,30 +61,28 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-linear-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
       <Container size="xs" className="w-full">
         <Card
-          shadow="xl"
+          shadow="md"
           padding="xl"
           radius="lg"
-          className="backdrop-blur-sm bg-white/90"
+          className="backdrop-blur-sm bg-white/90 border-gray-200 border"
         >
           <form onSubmit={handleLogin}>
             <Stack gap="lg">
               {/* Header */}
               <div className="text-center">
-                <Avatar
-                  size="xl"
-                  radius="xl"
-                  className="mx-auto mb-4"
-                  variant="gradient"
-                  gradient={{ from: "indigo", to: "cyan", deg: 45 }}
-                >
-                  <IconSchool size={40} />
-                </Avatar>
+                <Image
+                  src="/eys366.png"
+                  alt="EYS-366 Logo"
+                  width={80}
+                  height={80}
+                  className="mx-auto mb-1"
+                />
                 <Title
                   order={1}
-                  className="mb-2 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent"
+                  className="mb-2 bg-linear-to-r bg-clip-text"
                 >
                   EYS-366
                 </Title>
@@ -141,10 +139,6 @@ export default function LoginPage() {
               >
                 Login
               </Button>
-
-              <Text size="xs" c="dimmed" className="text-center">
-                This is a simulation environment for demonstration purposes
-              </Text>
             </Stack>
           </form>
         </Card>

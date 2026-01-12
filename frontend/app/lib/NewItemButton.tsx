@@ -19,7 +19,7 @@ export default function NewItemButton() {
     const [type, setType] = useState<NodeLayer>("course_content");
     const [name, setName] = useState("");
     const [error, setError] = useState<string | null>(null);
-    const NAME_MAX = 60;
+    const NAME_MAX = 100;
 
     const { user } = useAuth();
     const searchParams = useSearchParams();

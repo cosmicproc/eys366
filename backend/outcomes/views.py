@@ -5,7 +5,7 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -143,7 +143,7 @@ def upload_grades(request):
             if _should_ignore_header(col) or _should_ignore_header(normalized):
                 continue
 
-            # Find or create CourseContent
+            # Find CourseContent (do not create new entries)
             try:
                 cc = CourseContent.objects.get(name__iexact=col)
             except CourseContent.DoesNotExist:
@@ -153,7 +153,8 @@ def upload_grades(request):
                     cc = CourseContent.objects.filter(name__icontains=normalized).first()
 
             if not cc:
-                cc, created = CourseContent.objects.get_or_create(name=normalized)
+                # Skip columns that don't match existing graph nodes
+                continue
 
             # Save the score
             cc.score = float(val)
@@ -183,7 +184,7 @@ def upload_grades(request):
 # --- API Views (Kept from your new commit) ---
 
 class ProgramOutcomeList(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         outcomes = ProgramOutcome.objects.all().values('id', 'name')
         return Response(list(outcomes), status=status.HTTP_200_OK)
@@ -197,7 +198,7 @@ class ProgramOutcomeList(APIView):
 
 
 class ProgramOutcomeDetail(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     def get(self, request, pk):
         try:
             po = ProgramOutcome.objects.get(pk=pk)
@@ -226,7 +227,7 @@ class ProgramOutcomeDetail(APIView):
 
 
 class CourseOutcomeList(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         outcomes = CourseOutcome.objects.all().values('id', 'name', 'description')
         return Response(list(outcomes), status=status.HTTP_200_OK)
@@ -241,7 +242,7 @@ class CourseOutcomeList(APIView):
 
 
 class CourseOutcomeDetail(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     def get(self, request, pk):
         try:
             co = CourseOutcome.objects.get(pk=pk)
