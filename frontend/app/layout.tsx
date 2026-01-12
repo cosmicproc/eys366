@@ -19,8 +19,7 @@ const libreBaskerville = Outfit({
 });
 
 export const metadata: Metadata = {
-    title: process.env.APP_NAME,
-    description: "",
+    title: process.env.NEXT_PUBLIC_APP_NAME,
     icons: {
         icon: "/eys366.png",
     },

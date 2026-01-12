@@ -1,18 +1,25 @@
-from django.shortcuts import render
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-import pandas as pd
 import json
 
-# Import your models
-from .models import CourseContent, CourseOutcome, ProgramOutcome, StudentGrade  # Added StudentGrade if you use it
+import pandas as pd
+from django.http import JsonResponse
+from django.shortcuts import render
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework import status
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
 # Import your calculation logic
 from outcomes.utils import compute_course_and_program_outcomes
 
-from rest_framework.views import APIView
-from rest_framework import status
-from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
+# Import your models
+from .models import (  # Added StudentGrade if you use it
+    CourseContent,
+    CourseOutcome,
+    ProgramOutcome,
+    StudentGrade,
+)
+
 
 def calculate_average_student(data):
     """Calculates the average grades for all students from a list of records."""
@@ -100,7 +107,7 @@ def upload_grades(request):
                 
                 # NOTE: You might want to return specific student calculations here
                 # For now, we fall through to the standard return or you can return early:
-                return JsonResponse({'message': 'Student grades saved', 'values': values}, status=200)
+                return JsonResponse({'message': 'Student grades saved', 'mapped_values': values}, status=200)
 
             # --- Logic for Average (Class) Mode ---
             else:

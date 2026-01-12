@@ -1,6 +1,7 @@
 "use client";
 
 import { Avatar, Button, Group, Menu, Text } from "@mantine/core";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
@@ -147,9 +148,7 @@ function HeaderContent() {
                       {/* Left: Logic for Head/Lecturer */}
                       <div className="flex items-center justify-start gap-2">
                       {(user.role === "head" || user.role === "lecturer") && (
-                         <>
-
-                            
+                         <> 
                             <Suspense fallback={null}>
                                 <NewItemButton />
                             </Suspense>
@@ -223,72 +222,19 @@ function HeaderContent() {
     return (
         <header className="flex justify-between items-center absolute top-0 left-0 w-full z-10 px-8 py-4 pointer-events-none">
             {/* Left: Action buttons - Show for both head and lecturer */}
-            {isGraphPage &&
-                (user.role === "head" || user.role === "lecturer") && (
-                    <div className="pointer-events-auto gap-4 flex items-center">
-                        {/* Only show My Courses dropdown for head */}
-                        {user.role === "head" && (
-                            <Suspense
-                                fallback={
-                                    <Button variant="light" loading>
-                                        All Courses
-                                    </Button>
-                                }
-                            >
-                                <Menu shadow="md" width={200}>
-                                    <Menu.Target>
-                                        <Button
-                                            variant="light"
-                                            loading={loadingCourses}
-                                        >
-                                            All Courses
-                                        </Button>
-                                    </Menu.Target>
-                                    <Menu.Dropdown>
-                                        {coursesToShow.length === 0 ? (
-                                            <Menu.Item disabled>
-                                                No courses available
-                                            </Menu.Item>
-                                        ) : (
-                                            coursesToShow.map((course) => (
-                                                <Menu.Item
-                                                    key={course.id}
-                                                    onClick={() => {
-                                                        router.push(
-                                                            `/graph?courseId=${course.id}`
-                                                        );
-                                                    }}
-                                                >
-                                                    {course.name}
-                                                </Menu.Item>
-                                            ))
-                                        )}
-                                    </Menu.Dropdown>
-                                </Menu>
-                            </Suspense>
-                        )}
-
-                        {/* Show New Item and Upload buttons for both roles */}
-                        <Suspense fallback={null}>
-                            <NewItemButton />
-                        </Suspense>
-                        <Suspense fallback={null}>
-                            <UploadCSVButton
-                                onApplyValues={handleApplyCSVValues}
-                                onReset={handleResetScores}
-                            />
-                        </Suspense>
-                    </div>
-                )}
-
-            {/* Center: App Title */}
-            {isGraphPage && (
-                <div className="pointer-events-auto py-3 px-24 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 font-bold border-2 border-neutral-400 bg-blue-100/30 backdrop-blur rounded-4xl shadow-md flex items-center">
-                    <Link href="/" className="text-2xl">
+            {<div className="pointer-events-auto gap-4 flex items-center">
+                <Link href="/" className="flex items-center gap-2">
+                    <Image
+                        src="/eys366.png"
+                        alt="Logo"
+                        width={40}
+                        height={40}
+                    />
+                    <Text fw={900} size="xl" className="tracking-tight text-slate-800">
                         {process.env.NEXT_PUBLIC_APP_NAME || "Giraph"}
-                    </Link>
-                </div>
-            )}
+                    </Text>
+                </Link>
+            </div>}
 
             {/* Right: User Profile - Always visible */}
             <div className="pointer-events-auto flex items-center gap-4 ml-auto">

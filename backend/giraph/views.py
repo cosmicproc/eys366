@@ -290,19 +290,20 @@ class ApplyScores(APIView):
         for col, val in values.items():
             normalized = str(col).rsplit("_", 1)[0].strip()
             node = None
-            try:
-                node = Node.objects.get(
-                    name__iexact=col, layer=LayerChoices.COURSE_CONTENT
-                )
-            except Node.DoesNotExist:
-                try:
-                    node = Node.objects.get(
-                        name__iexact=normalized, layer=LayerChoices.COURSE_CONTENT
-                    )
-                except Node.DoesNotExist:
-                    node = Node.objects.filter(
-                        name__icontains=normalized, layer=LayerChoices.COURSE_CONTENT
-                    ).first()
+            # Use filter().first() to handle potential duplicates gracefully
+            node = Node.objects.filter(
+                name__iexact=col, layer=LayerChoices.COURSE_CONTENT
+            ).first()
+            
+            if not node:
+                node = Node.objects.filter(
+                    name__iexact=normalized, layer=LayerChoices.COURSE_CONTENT
+                ).first()
+            
+            if not node:
+                node = Node.objects.filter(
+                    name__icontains=normalized, layer=LayerChoices.COURSE_CONTENT
+                ).first()
 
             # If node not found but a course_id is provided, try to create the node (and CourseContent if missing)
             if not node and course_id:

@@ -3,19 +3,19 @@
 import {
   Button,
   Container,
+  Group,
   Paper,
   PasswordInput,
+  Stack,
   TextInput,
   Title,
-  Stack,
-  Group,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "../lib/AuthContext";
-import { updateUserProfile, updateUserPassword } from "../lib/apiClient";
+import { updateUserPassword, updateUserProfile } from "../lib/apiClient";
 
 export default function UserSettings() {
   const { user, loading } = useAuth();
@@ -116,8 +116,8 @@ export default function UserSettings() {
   }
 
   return (
-    <Container size="sm" className="py-20 mt-20">
-      <Title order={1} mb="xl">
+    <Container size="sm" className="py-20 mt-20 w-[28em]">
+      <Title order={1} mb="xl" className="text-center">
         User Settings
       </Title>
 
@@ -177,9 +177,6 @@ export default function UserSettings() {
               {...passwordForm.getInputProps("confirmPassword")}
             />
             <Group justify="flex-end" mt="md">
-              <Button variant="outline" onClick={() => passwordForm.reset()}>
-                Reset
-              </Button>
               <Button type="submit" loading={updating}>
                 Update Password
               </Button>
