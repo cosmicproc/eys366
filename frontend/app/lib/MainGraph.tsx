@@ -47,12 +47,11 @@ const DISTINCT_COLORS = [
 
 // Constants for layout
 const NODE_PADDING = 20; // padding inside node
-const NODE_MIN_WIDTH = 150;
+const NODE_MIN_WIDTH = 180; // 10em assuming 1em = 16px
 const NODE_MAX_WIDTH = 350;
 const CHAR_WIDTH = 8; // approximate character width for normal font
 const CHAR_WIDTH_SMALL = 6; // approximate character width for smaller font (11px)
-const NODE_BASE_HEIGHT = 80; // base height for node
-const NODE_BASE_HEIGHT_SMALL = 65; // base height for node with small font
+const NODE_BASE_HEIGHT = 50; // base height for node
 const VERTICAL_GAP = 50; // vertical gap between nodes in same layer
 const LAYER_GAP = 225; // horizontal gap between layers (increased for clarity)
 
@@ -63,12 +62,11 @@ const calculateNodeWidth = (label: string): number => {
 };
 
 // Calculate node height (can expand for multi-line text)
-// useSmallFont: for CO/PO nodes with text > 150 chars
-const calculateNodeHeight = (label: string, width: number, useSmallFont: boolean = false): number => {
-    const charWidth = useSmallFont ? CHAR_WIDTH_SMALL : CHAR_WIDTH;
-    const baseHeight = useSmallFont ? NODE_BASE_HEIGHT_SMALL : NODE_BASE_HEIGHT;
-    const lineHeight = useSmallFont ? 14 : 20; // smaller line height for small font
-    
+// If isTruncatedPO is true, use a smaller base height to avoid extra space
+const calculateNodeHeight = (label: string, width: number, isTruncatedPO?: boolean): number => {
+    const charWidth = CHAR_WIDTH;
+    const baseHeight = isTruncatedPO ? 40 : NODE_BASE_HEIGHT;
+    const lineHeight = 20;
     const charsPerLine = Math.floor((width - NODE_PADDING * 2) / charWidth);
     const lines = Math.ceil(label.length / charsPerLine);
     return baseHeight + Math.max(0, lines - 1) * lineHeight;
@@ -229,30 +227,31 @@ const convertToNodes = (
     // CC nodes: normal font
     const ccDimensions = sortedCC.map(node => {
         const width = calculateNodeWidth(node.name);
-        const height = calculateNodeHeight(node.name, width, false);
+        const height = calculateNodeHeight(node.name, width);
         return { width, height };
     });
     
-    // CO nodes: use small font if text > 150 chars
+    // CO nodes: use truncated label and reduced base height if text > 85 chars
     const coDimensions = sortedCO.map(node => {
         const width = calculateNodeWidth(node.name);
-        const useSmallFont = node.name.length > 150;
-        const height = calculateNodeHeight(node.name, width, useSmallFont);
+        const isTruncated = node.name.length > 85;
+        const displayLabel = isTruncated ? node.name.slice(0, 85) + '…' : node.name;
+        const height = calculateNodeHeight(displayLabel, width, isTruncated);
         return { width, height };
     });
     
-    // PO nodes: use small font if text > 150 chars
+    // PO nodes: use truncated label for height if text > 85 chars, and reduce base height for truncated
     const poDimensions = sortedPO.map(node => {
         const width = calculateNodeWidth(node.name);
-        const useSmallFont = node.name.length > 150;
-        const height = calculateNodeHeight(node.name, width, useSmallFont);
+        const isTruncated = node.name.length > 85;
+        const displayLabel = isTruncated ? node.name.slice(0, 85) + '…' : node.name;
+        const height = calculateNodeHeight(displayLabel, width, isTruncated);
         return { width, height };
     });
 
     // 3. Calculate max width per layer for alignment
     const ccMaxWidth = ccDimensions.length > 0 ? Math.max(...ccDimensions.map(d => d.width)) : NODE_MIN_WIDTH;
     const coMaxWidth = coDimensions.length > 0 ? Math.max(...coDimensions.map(d => d.width)) : NODE_MIN_WIDTH;
-    const poMaxWidth = poDimensions.length > 0 ? Math.max(...poDimensions.map(d => d.width)) : NODE_MIN_WIDTH;
 
     // 4. Calculate total height per layer
     const ccTotalHeight = ccDimensions.reduce((sum, d) => sum + d.height + VERTICAL_GAP, -VERTICAL_GAP);
@@ -393,6 +392,13 @@ const convertToEdges = (data: GetNodesResponse): Edge[] => {
                 const color = DISTINCT_COLORS[colorIndex % DISTINCT_COLORS.length];
                 colorIndex++;
 
+                // Make edge thickness depend on weight (e.g. 1-5 maps to 2-6px)
+                const minStroke = 1.5;
+                const maxStroke = 4;
+                const minWeight = 1;
+                const maxWeight = 5;
+                const weight = Math.max(minWeight, Math.min(maxWeight, rel.weight));
+                const strokeWidth = minStroke + ((weight - minWeight) / (maxWeight - minWeight)) * (maxStroke - minStroke);
                 edges.push({
                     id: `e-${rel.relation_id}`,
                     source: srcId,
@@ -402,7 +408,7 @@ const convertToEdges = (data: GetNodesResponse): Edge[] => {
                     animated: true,
                     style: {
                         stroke: color,
-                        strokeWidth: 2,
+                        strokeWidth,
                     },
                     labelStyle: {
                         fill: color,
@@ -729,10 +735,15 @@ export default function MainGraph() {
                     weightValue
                 );
 
+                // Use same thickness logic as convertToEdges
+                const minStroke = 1.5;
+                const maxStroke = 4;
+                const minWeight = 1;
+                const maxWeight = 5;
+                const weight = Math.max(minWeight, Math.min(maxWeight, weightValue));
+                const strokeWidth = minStroke + ((weight - minWeight) / (maxWeight - minWeight)) * (maxStroke - minStroke);
                 const sourceLayer = getNodeLayer(pendingConnection.source);
-                const edgeColor =
-                    sourceLayer === "course_content" ? "#1976d2" : "#388e3c";
-
+                const edgeColor = sourceLayer === "course_content" ? "#1976d2" : "#388e3c";
                 const newEdge: Edge = {
                     id: `e-${response.relation_id}`,
                     source: pendingConnection.source,
@@ -745,7 +756,7 @@ export default function MainGraph() {
                     animated: true,
                     style: {
                         stroke: edgeColor,
-                        strokeWidth: 2,
+                        strokeWidth,
                     },
                     labelStyle: {
                         fill: edgeColor,
@@ -757,7 +768,6 @@ export default function MainGraph() {
                         fillOpacity: 0.9,
                     },
                 };
-
                 setEdges((eds) => addEdge(newEdge, eds));
                 closeWeightModal();
             } else if (modalMode === "edit" && editingEdge) {
@@ -770,6 +780,13 @@ export default function MainGraph() {
 
                 await updateRelation(relationId, weightValue);
 
+                // Use same thickness logic as convertToEdges
+                const minStroke = 1.5;
+                const maxStroke = 4;
+                const minWeight = 1;
+                const maxWeight = 5;
+                const weight = Math.max(minWeight, Math.min(maxWeight, weightValue));
+                const strokeWidth = minStroke + ((weight - minWeight) / (maxWeight - minWeight)) * (maxStroke - minStroke);
                 setEdges((prev) =>
                     prev.map((e) =>
                         e.id === editingEdge.id
@@ -777,11 +794,14 @@ export default function MainGraph() {
                                   ...e,
                                   label: `${weightValue}`,
                                   data: { ...e.data, weight: weightValue },
+                                  style: {
+                                      ...(e.style || {}),
+                                      strokeWidth,
+                                  },
                               }
                             : e
                     )
                 );
-
                 closeWeightModal();
             }
         } catch (err) {

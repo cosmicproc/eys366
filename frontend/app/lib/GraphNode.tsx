@@ -16,32 +16,33 @@ export default function GraphNode(props: {
     onEdit?: (apiId: number, currentName: string, nodeType: "cc" | "co" | "po") => void;
     onDelete?: (apiId: number, currentName: string) => void;
 }) {
-    // Use smaller font for CO/PO if text is longer than 150 chars
-    const isLongText = props.data.label.length > 150;
+    // Truncate CO/PO text at 100 chars and show full text on hover
     const isOutcome = props.data.nodeType === "co" || props.data.nodeType === "po";
-    const useSmallFont = isLongText && isOutcome;
+    const shouldTruncate = isOutcome && props.data.label.length > 85;
+    const truncatedLabel = shouldTruncate ? props.data.label.slice(0, 85) + '…' : props.data.label;
     
     return (
         <div className="flex flex-col h-full">
             {props.targetPosition && (
-                <Handle type="target" position={props.targetPosition} />
+                <Handle type="target" position={props.targetPosition} className="h-2! w-2!" />
             )}
-            <div 
-                className={`font-medium mb-1 text-center flex-1 flex items-center justify-center ${useSmallFont ? 'text-xs' : ''}`}
-                style={{ 
+            <div
+                className="font-medium mb-1 text-center flex-1 flex items-center justify-center"
+                style={{
                     wordBreak: 'break-word',
                     overflowWrap: 'break-word',
                     hyphens: 'auto',
-                    fontSize: useSmallFont ? '0.9em' : undefined,
-                    lineHeight: useSmallFont ? '1.3' : undefined,
                 }}
+                title={shouldTruncate ? props.data.label : undefined}
             >
-                {props.data.label}
+                {truncatedLabel}
             </div>
-            
+
             {(props.data.score !== undefined && props.data.score !== null) && (
-                <div className="text-xs text-center text-gray-600 mb-2 font-semibold">
-                    Score: {Math.round(props.data.score)}%
+                <div className="absolute bottom-2 right-2">
+                    <span className="inline-block bg-indigo-800 text-white text-xs font-bold rounded-full px-2 py-0.5 shadow-sm">
+                        {Math.round(props.data.score)}%
+                    </span>
                 </div>
             )}
 
@@ -69,7 +70,7 @@ export default function GraphNode(props: {
                 </ActionIcon>
             </div>
             {props.sourcePosition && (
-                <Handle type="source" position={props.sourcePosition} />
+                <Handle type="source" position={props.sourcePosition} className="h-2! w-2!" />
             )}
         </div>
     );
